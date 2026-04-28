@@ -10,6 +10,7 @@ dotenv.config();
 const { connectDB } = require('./config/db');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
+const seedAdmin = require('./seeds/adminSeed');
 
 const app = express();
 
@@ -73,6 +74,10 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
+    
+    // Seed admin user
+    await seedAdmin();
+    
     app.listen(PORT, () => {
       console.log(`✅ LocalBiz Backend running on port ${PORT}`);
       console.log(`📧 Environment: ${process.env.NODE_ENV}`);
