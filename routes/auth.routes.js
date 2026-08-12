@@ -25,6 +25,7 @@ const registerBusinessValidation = [
   body('address').notEmpty().withMessage('Address is required'),
   body('city').notEmpty().withMessage('City is required'),
   body('storePhone').matches(/^[0-9]{10,}$/).withMessage('Valid phone number is required'),
+  body('logo').optional().isString().withMessage('Logo must be a valid base64 string'),
 ];
 
 const loginValidation = [
@@ -48,13 +49,13 @@ const resetPasswordValidation = [
 ];
 
 // Routes
-router.post('/register/customer', registerCustomerValidation, validate, authController.registerCustomer);
-router.post('/register/business', registerBusinessValidation, validate, authController.registerBusiness);
-router.post('/login', loginValidation, validate, authController.login);
-router.post('/admin/login', loginValidation, validate, authController.adminLogin);
-router.post('/verify-email', verifyEmailValidation, validate, authController.verifyEmail);
-router.post('/forgot-password', forgotPasswordValidation, validate, authController.forgotPassword);
-router.post('/reset-password', resetPasswordValidation, validate, authController.resetPassword);
+router.post('/register/customer', ...registerCustomerValidation, validate, authController.registerCustomer);
+router.post('/register/business', ...registerBusinessValidation, validate, authController.registerBusiness);
+router.post('/login', ...loginValidation, validate, authController.login);
+router.post('/admin/login', ...loginValidation, validate, authController.adminLogin);
+router.post('/verify-email', ...verifyEmailValidation, validate, authController.verifyEmail);
+router.post('/forgot-password', ...forgotPasswordValidation, validate, authController.forgotPassword);
+router.post('/reset-password', ...resetPasswordValidation, validate, authController.resetPassword);
 router.post('/logout', auth, authController.logout);
 
 module.exports = router;

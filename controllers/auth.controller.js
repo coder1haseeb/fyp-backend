@@ -92,7 +92,7 @@ const registerBusiness = async (req, res) => {
 
     await owner.save();
 
-    // Create business
+    // Create business with base64 logo from request body
     const business = new Business({
       storeName,
       category: categoryId,
@@ -100,6 +100,7 @@ const registerBusiness = async (req, res) => {
       address,
       city,
       phone: storePhone,
+      logo: req.body.logo || '',
       owner: owner._id,
       approvalStatus: 'pending',
     });
@@ -152,18 +153,17 @@ const login = async (req, res) => {
       return error(res, 403, 'Your account has been suspended', 'ACCOUNT_SUSPENDED');
     }
 
-    // For business owner, check if any business is approved
+    // For business owner, find their business (any approval status)
     if (businessOwner) {
-      const approvedBusiness = await Business.findOne({
+      const business = await Business.findOne({
         owner: user._id,
-        approvalStatus: 'approved',
-      });
+      }).populate('category', 'name icon');
 
-      if (!approvedBusiness) {
-        return error(res, 403, 'Your business is not approved yet', 'BUSINESS_NOT_APPROVED');
+      if (!business) {
+        return error(res, 403, 'No business found for this account', 'BUSINESS_NOT_FOUND');
       }
 
-      const token = generateToken(user._id, 'business_admin', approvedBusiness._id);
+      const token = generateToken(user._id, 'business_admin', business._id);
       return success(res, 200, 'Login successful', {
         token,
         user: {
@@ -171,8 +171,9 @@ const login = async (req, res) => {
           fullName: user.fullName,
           email: user.email,
           role: 'business_admin',
-          businessId: approvedBusiness._id,
+          businessId: business._id,
         },
+        business,
       });
     }
 
