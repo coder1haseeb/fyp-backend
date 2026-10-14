@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const mongoose = require('mongoose');
 const { success, error } = require('../utils/ApiResponse');
 
 // Get Dashboard Summary
@@ -67,7 +68,7 @@ const getSalesTrend = async (req, res) => {
     const salesData = await Order.aggregate([
       {
         $match: {
-          business: businessId,
+          business: new mongoose.Types.ObjectId(businessId),
           status: { $ne: 'cancelled' },
         },
       },
@@ -107,7 +108,7 @@ const getTopProducts = async (req, res) => {
     const topProducts = await Order.aggregate([
       {
         $match: {
-          business: businessId,
+          business: new mongoose.Types.ObjectId(businessId),
           status: { $ne: 'cancelled' },
         },
       },
@@ -170,7 +171,7 @@ const getPaymentBreakdown = async (req, res) => {
     const breakdown = await Order.aggregate([
       {
         $match: {
-          business: businessId,
+          business: new mongoose.Types.ObjectId(businessId),
           status: { $ne: 'cancelled' },
         },
       },
@@ -218,7 +219,7 @@ const getCustomerInsights = async (req, res) => {
     const returningCustomers = await Order.aggregate([
       {
         $match: {
-          business: businessId,
+          business: new mongoose.Types.ObjectId(businessId),
           status: { $ne: 'cancelled' },
         },
       },

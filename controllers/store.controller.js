@@ -57,7 +57,7 @@ const getStoreById = async (req, res) => {
       .populate('owner', 'fullName email phone')
       .lean();
 
-    if (!store || store.approvalStatus !== 'approved') {
+    if (!store || store.approvalStatus !== 'approved' || !store.isActive) {
       return error(res, 404, 'Store not found', 'NOT_FOUND');
     }
 

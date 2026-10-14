@@ -5,6 +5,11 @@ const Return = require('../models/Return');
 const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
 
+const validStoreImage = value => typeof value === 'string' && (
+  value === '' || /^https?:\/\//i.test(value) ||
+  (value.length <= 3 * 1024 * 1024 && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value))
+);
+
 // Get Business Profile
 const getBusinessProfile = async (req, res) => {
   try {
@@ -37,13 +42,18 @@ const updateBusinessProfile = async (req, res) => {
       return error(res, 404, 'Business not found', 'NOT_FOUND');
     }
 
+    if ((logo !== undefined && !validStoreImage(logo)) ||
+        (coverImage !== undefined && !validStoreImage(coverImage))) {
+      return error(res, 400, 'Store images must be JPG, PNG, or WebP and smaller than 2 MB', 'INVALID_IMAGE');
+    }
+
     if (storeName) business.storeName = storeName;
     if (description) business.description = description;
     if (address) business.address = address;
     if (city) business.city = city;
     if (phone) business.phone = phone;
-    if (logo) business.logo = logo;
-    if (coverImage) business.coverImage = coverImage;
+    if (logo !== undefined) business.logo = logo;
+    if (coverImage !== undefined) business.coverImage = coverImage;
     if (operatingHours) business.operatingHours = new Map(Object.entries(operatingHours));
 
     await business.save();
@@ -280,6 +290,40 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
+// Get Business Returns
+const getReturns = async (req, res) => {
+  try {
+    const businessId = req.user.businessId;
+    const { status, page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = { business: businessId };
+    if (status) query.status = status;
+
+    const total = await Return.countDocuments(query);
+    const returns = await Return.find(query)
+      .populate('order', 'orderId totalAmount')
+      .populate('customer', 'fullName email phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    return success(res, 200, 'Returns retrieved', {
+      returns,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        total,
+        limit: parseInt(limit),
+      },
+    });
+  } catch (err) {
+    console.error('Get business returns error:', err);
+    return error(res, 500, 'Error retrieving returns', 'GET_RETURNS_ERROR');
+  }
+};
+
 // Handle Return
 const handleReturn = async (req, res) => {
   try {
@@ -332,5 +376,6 @@ module.exports = {
   getOrders,
   getOrderById,
   updateOrderStatus,
+  getReturns,
   handleReturn,
 };

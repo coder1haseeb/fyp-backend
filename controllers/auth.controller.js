@@ -259,6 +259,26 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+// Issue a fresh verification code for an unverified customer.
+const resendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const customer = await Customer.findOne({ email }).select('+otpCode +otpExpiry');
+    if (!customer || customer.emailVerified) {
+      return success(res, 200, 'If verification is pending, a code has been sent', {});
+    }
+    const { otp, expiry } = generateOTP();
+    await sendOTPEmail(email, otp, 'verify');
+    customer.otpCode = otp;
+    customer.otpExpiry = expiry;
+    await customer.save();
+    return success(res, 200, 'Verification code sent', {});
+  } catch (err) {
+    console.error('Resend verification code error:', err);
+    return error(res, 503, 'Could not send verification code. Please try again.', 'EMAIL_ERROR');
+  }
+};
+
 // Forgot Password
 const forgotPassword = async (req, res) => {
   try {
@@ -343,6 +363,7 @@ module.exports = {
   login,
   adminLogin,
   verifyEmail,
+  resendVerificationCode,
   forgotPassword,
   resetPassword,
   logout,

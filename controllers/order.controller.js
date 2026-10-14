@@ -2,9 +2,11 @@ const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+const Business = require('../models/Business');
 const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
 const checkLowStockAndNotify = require('../utils/stockAlertChecker');
+const recordInteraction = require('../utils/recordInteraction');
 
 // Helper: Generate Order ID
 const generateOrderId = async () => {
@@ -40,6 +42,10 @@ const placeOrder = async (req, res) => {
     for (const item of cart.items) {
       const product = item.product;
 
+      if (!product || product.status !== 'active') {
+        return error(res, 400, 'A product in your cart is no longer available', 'PRODUCT_UNAVAILABLE');
+      }
+
       // Check stock
       if (product.stockQty < item.quantity) {
         return error(
@@ -62,6 +68,10 @@ const placeOrder = async (req, res) => {
         total: product.price * item.quantity,
         productData: product,
       });
+    }
+
+    if (['jazzcash', 'easypaisa'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
+      return error(res, 400, 'Wallet checkout supports one store at a time. Please order from each store separately.', 'MULTI_STORE_WALLET');
     }
 
     // Create orders and payments
@@ -123,8 +133,9 @@ const placeOrder = async (req, res) => {
       }
 
       // Notify business admin
+      const business = await Business.findById(businessId).select('owner');
       await createNotification(
-        order.business,
+        business.owner,
         'BusinessOwner',
         'order_update',
         `New Order Received - ${orderId}`,
@@ -143,6 +154,11 @@ const placeOrder = async (req, res) => {
 
     // Clear cart
     await Cart.findOneAndUpdate({ customer: customerId }, { items: [] });
+    for (const created of createdOrders.filter(entry => ['cod', 'pay_at_store'].includes(entry.order.paymentMethod))) {
+      for (const item of created.order.items) {
+        await recordInteraction(customerId, item.product, 'purchase');
+      }
+    }
 
     return success(res, 201, 'Order(s) placed successfully', {
       orders: createdOrders.map((o) => ({
@@ -247,8 +263,9 @@ const cancelOrder = async (req, res) => {
     await order.save();
 
     // Notify business admin
+    const business = await Business.findById(order.business).select('owner');
     await createNotification(
-      order.business,
+      business.owner,
       'BusinessOwner',
       'order_update',
       `Order Cancelled - ${order.orderId}`,

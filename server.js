@@ -36,6 +36,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 requests per windowMs
+  skip: () => process.env.NODE_ENV === 'development',
   message: 'Too many authentication attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

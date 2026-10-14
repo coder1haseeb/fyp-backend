@@ -100,6 +100,17 @@ router.put(
 );
 
 // Return routes
+router.get(
+  '/returns',
+  [
+    query('status').optional().isIn(['pending', 'approved', 'rejected']).withMessage('Invalid status'),
+    query('page').optional().isInt({ min: 1 }).withMessage('Page must be positive'),
+    query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1-50'),
+  ],
+  validate,
+  businessController.getReturns
+);
+
 router.put(
   '/returns/:returnId',
   [

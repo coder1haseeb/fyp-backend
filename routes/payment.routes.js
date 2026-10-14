@@ -7,7 +7,10 @@ const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 
-// All routes require customer auth
+// Provider callback is authenticated with the JazzCash response signature.
+router.post('/notification', paymentController.jazzCashNotification);
+
+// All customer routes require authentication.
 router.use(auth, authorize('customer'));
 
 // Initiate JazzCash payment

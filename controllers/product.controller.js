@@ -8,10 +8,11 @@ const getProductById = async (req, res) => {
     const { productId } = req.params;
 
     const product = await Product.findById(productId)
-      .populate('business', 'storeName logo city rating phone')
+      .populate('business', 'storeName logo city rating phone approvalStatus isActive')
       .lean();
 
-    if (!product || product.status !== 'active') {
+    if (!product || product.status !== 'active' || !product.business ||
+        product.business.approvalStatus !== 'approved' || !product.business.isActive) {
       return error(res, 404, 'Product not found', 'NOT_FOUND');
     }
 
@@ -64,6 +65,11 @@ const getProductsByBusiness = async (req, res) => {
   try {
     const { businessId } = req.params;
     const { status, page = 1, limit = 10 } = req.query;
+    const business = await Business.findById(businessId);
+    if (!business) return error(res, 404, 'Business not found', 'NOT_FOUND');
+    if (business.owner.toString() !== req.user.userId) {
+      return error(res, 403, 'Not authorized to view these products', 'UNAUTHORIZED');
+    }
 
     const query = { business: businessId };
     if (status) query.status = status;
@@ -191,15 +197,16 @@ async function getPublicProducts(req, res) {
     const { limit = 10, page = 1 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Fetch products - check both active and draft status for now
-    const products = await Product.find()
+    const approvedBusinesses = await Business.find({ approvalStatus: 'approved', isActive: true }).distinct('_id');
+    const query = { status: 'active', business: { $in: approvedBusinesses } };
+    const products = await Product.find(query)
       .populate('business', 'storeName logo city')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
 
-    const total = await Product.countDocuments();
+    const total = await Product.countDocuments(query);
 
     console.log(`[getPublicProducts] Found ${products.length} products (total: ${total})`);
 

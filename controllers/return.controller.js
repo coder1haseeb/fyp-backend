@@ -1,5 +1,7 @@
 const Return = require('../models/Return');
 const Order = require('../models/Order');
+const Product = require('../models/Product');
+const Business = require('../models/Business');
 const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
 
@@ -31,6 +33,7 @@ const createReturn = async (req, res) => {
     if (!orderItem) {
       return error(res, 404, 'Product not found in order', 'NOT_FOUND');
     }
+    const product = await Product.findById(productId).select('name');
 
     // Generate return ID
     const returnId = await generateReturnId();
@@ -41,7 +44,7 @@ const createReturn = async (req, res) => {
       order: orderId,
       orderItem: {
         productId: orderItem.product,
-        productName: orderItem.product.name,
+        productName: product?.name || 'Product',
         quantity: orderItem.quantity,
       },
       customer: customerId,
@@ -55,8 +58,9 @@ const createReturn = async (req, res) => {
     await returnRequest.save();
 
     // Notify business admin
+    const business = await Business.findById(order.business).select('owner');
     await createNotification(
-      order.business,
+      business.owner,
       'BusinessOwner',
       'return',
       `Return Request - ${returnId}`,

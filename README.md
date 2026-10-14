@@ -6,7 +6,7 @@ A production-ready Node.js + Express.js REST API for LocalBiz - an AI-powered mu
 
 - **Multi-Role Architecture**: Customers, Business Admins, and Super Admins
 - **JWT Authentication**: Stateless, role-based access control
-- **AI Recommendations**: Collaborative filtering engine for personalized recommendations
+- **AI Recommendations**: Hybrid content and behavior ranking with cold-start suggestions
 - **Payment Integration**: JazzCash and Easypaisa sandbox support
 - **Inventory Management**: Real-time stock tracking and low-stock alerts
 - **Order Management**: Full order lifecycle with status tracking
@@ -109,7 +109,7 @@ localbiz-backend/
     ├── sendEmail.js                   # Email sending
     ├── generateInvoicePDF.js          # PDF invoice builder
     ├── createNotification.js          # Notification creation
-    ├── collaborativeFilter.js         # AI recommendation engine
+    ├── recommendationEngine.js         # TF-IDF and behavior ranking
     └── stockAlertChecker.js           # Low-stock alerts
 ```
 
@@ -168,6 +168,7 @@ localbiz-backend/
 | POST | `/login` | Customer/Business login |
 | POST | `/admin/login` | Super admin login |
 | POST | `/verify-email` | Verify email with OTP |
+| POST | `/resend-verification` | Send a fresh email verification OTP |
 | POST | `/forgot-password` | Request password reset OTP |
 | POST | `/reset-password` | Reset password with OTP |
 | POST | `/logout` | Logout (client-side token removal) |
@@ -223,7 +224,10 @@ localbiz-backend/
 |--------|----------|-------------|
 | POST | `/jazzcash/initiate` | Initiate JazzCash payment |
 | POST | `/easypaisa/initiate` | Initiate Easypaisa payment |
+| POST | `/notification` | Verify and apply JazzCash payment notification |
 | GET | `/:paymentId/status` | Check payment status |
+
+Wallet checkout is limited to one store per order. A wallet return to the frontend only displays the recorded payment status; it does not mark an order paid. Easypaisa settlement still requires a verified provider callback integration.
 
 ### Return Routes `/api/v1/returns`
 
@@ -239,6 +243,8 @@ localbiz-backend/
 | GET | `/` | Get personalized recommendations |
 | GET | `/similar/:productId` | Get similar products |
 | POST | `/interaction` | Log user interaction |
+
+Recommendations use product text, recent customer views, cart additions, placed orders, similar shoppers, popularity, and city. New customers receive popular and recent products. Only active, in-stock products from approved stores are eligible. Browser clients may record views; cart and order events are recorded by the backend. The catalogue and recent interaction windows are capped for this local application. Run `node tests/recommendationEngine.test.js` to check the ranking logic.
 
 ### Business Admin Routes `/api/v1/business`
 
@@ -293,7 +299,7 @@ localbiz-backend/
 |--------|----------|-------------|
 | GET | `/` | Get all categories (public) |
 
-### Admin Category Routes `/api/v1/admin/categories`
+### Admin Category Routes `/api/v1/categories/admin/categories`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

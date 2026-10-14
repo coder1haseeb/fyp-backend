@@ -54,6 +54,7 @@ router.post('/register/business', ...registerBusinessValidation, validate, authC
 router.post('/login', ...loginValidation, validate, authController.login);
 router.post('/admin/login', ...loginValidation, validate, authController.adminLogin);
 router.post('/verify-email', ...verifyEmailValidation, validate, authController.verifyEmail);
+router.post('/resend-verification', body('email').isEmail(), validate, authController.resendVerificationCode);
 router.post('/forgot-password', ...forgotPasswordValidation, validate, authController.forgotPassword);
 router.post('/reset-password', ...resetPasswordValidation, validate, authController.resetPassword);
 router.post('/logout', auth, authController.logout);

@@ -29,5 +29,6 @@ const interactionSchema = new mongoose.Schema(
 interactionSchema.index({ customer: 1, createdAt: -1 });
 interactionSchema.index({ product: 1 });
 interactionSchema.index({ customer: 1, product: 1 });
+interactionSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Interaction', interactionSchema);

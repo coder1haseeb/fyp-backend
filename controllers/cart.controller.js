@@ -1,5 +1,6 @@
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+const recordInteraction = require('../utils/recordInteraction');
 const { success, error } = require('../utils/ApiResponse');
 
 // Get Cart
@@ -63,6 +64,7 @@ const addToCart = async (req, res) => {
     }
 
     await cart.save();
+    await recordInteraction(customerId, productId, 'add_to_cart');
 
     const populated = await cart.populate({
       path: 'items.product',

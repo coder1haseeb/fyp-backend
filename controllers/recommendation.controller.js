@@ -1,136 +1,73 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
+const Customer = require('../models/Customer');
+const Business = require('../models/Business');
 const Interaction = require('../models/Interaction');
+const { rankProducts, similarProducts } = require('../utils/recommendationEngine');
 const { success, error } = require('../utils/ApiResponse');
-const collaborativeFilter = require('../utils/collaborativeFilter');
 
-// Get Recommendations
+const visibleCatalogue = async () => {
+  const products = await Product.find({ status: 'active', stockQty: { $gt: 0 } })
+    .sort({ createdAt: -1 }).limit(1000)
+    .populate({ path: 'business', match: { approvalStatus: 'approved', isActive: true }, select: 'storeName city logo' })
+    .lean();
+  return products.filter(product => product.business);
+};
+
 const getRecommendations = async (req, res) => {
   try {
-    const customerId = req.user.userId;
-    const { limit = 10 } = req.query;
-
-    const recommendations = await collaborativeFilter(customerId, parseInt(limit));
-
-    return success(res, 200, 'Recommendations retrieved', {
-      products: recommendations,
-      count: recommendations.length,
-    });
+    const limit = Number(req.query.limit || 10);
+    const [products, interactions, customer] = await Promise.all([
+      visibleCatalogue(),
+      Interaction.find({ createdAt: { $gte: new Date(Date.now() - 90 * 86400000) } })
+        .sort({ createdAt: -1 }).limit(5000).lean(),
+      Customer.findById(req.user.userId).select('city').lean(),
+    ]);
+    const ranked = rankProducts({ products, interactions, customerId: req.user.userId,
+      customerCity: customer?.city || '', limit });
+    return success(res, 200, 'Recommendations retrieved', { products: ranked, count: ranked.length });
   } catch (err) {
     console.error('Get recommendations error:', err);
     return error(res, 500, 'Error retrieving recommendations', 'REC_ERROR');
   }
 };
 
-// Get Similar Products
 const getSimilarProducts = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { limit = 5 } = req.query;
-
-    const product = await Product.findById(productId);
-    if (!product || product.status !== 'active') {
+    if (!mongoose.isValidObjectId(productId)) return error(res, 404, 'Product not found', 'NOT_FOUND');
+    const [source, products] = await Promise.all([
+      Product.findById(productId).populate({ path: 'business', match: { approvalStatus: 'approved', isActive: true }, select: 'storeName city logo' }).lean(),
+      visibleCatalogue(),
+    ]);
+    if (!source || source.status !== 'active' || !source.business) {
       return error(res, 404, 'Product not found', 'NOT_FOUND');
     }
-
-    // Find products in same category, exclude source product
-    const similarProducts = await Product.aggregate([
-      {
-        $match: {
-          category: product.category,
-          _id: { $ne: product._id },
-          status: 'active',
-        },
-      },
-      {
-        $lookup: {
-          from: 'interactions',
-          localField: '_id',
-          foreignField: 'product',
-          as: 'interactions',
-        },
-      },
-      {
-        $addFields: {
-          interactionCount: { $size: '$interactions' },
-        },
-      },
-      {
-        $sort: { interactionCount: -1 },
-      },
-      {
-        $limit: parseInt(limit),
-      },
-      {
-        $lookup: {
-          from: 'businesses',
-          localField: 'business',
-          foreignField: '_id',
-          as: 'business',
-        },
-      },
-      {
-        $unwind: '$business',
-      },
-      {
-        $project: {
-          name: 1,
-          description: 1,
-          price: 1,
-          images: 1,
-          category: 1,
-          stockQty: 1,
-          status: 1,
-          'business.storeName': 1,
-          'business.logo': 1,
-          'business.rating': 1,
-          interactionCount: 1,
-        },
-      },
-    ]);
-
-    return success(res, 200, 'Similar products retrieved', {
-      products: similarProducts,
-      count: similarProducts.length,
-    });
+    const ranked = similarProducts(products, source, Number(req.query.limit || 5));
+    return success(res, 200, 'Similar products retrieved', { products: ranked, count: ranked.length });
   } catch (err) {
     console.error('Get similar products error:', err);
     return error(res, 500, 'Error retrieving similar products', 'SIMILAR_ERROR');
   }
 };
 
-// Log Interaction
 const logInteraction = async (req, res) => {
   try {
-    const { productId, interactionType, durationSeconds = 0 } = req.body;
-    const customerId = req.user.userId;
-
-    // Verify product exists
-    const product = await Product.findById(productId);
-    if (!product) {
-      return error(res, 404, 'Product not found', 'NOT_FOUND');
-    }
-
-    // Create interaction
-    const interaction = new Interaction({
-      customer: customerId,
-      product: productId,
-      interactionType,
-      durationSeconds,
-    });
-
-    await interaction.save();
-
-    return success(res, 201, 'Interaction logged', {
-      interactionId: interaction._id,
-    });
+    const { productId } = req.body;
+    if (!mongoose.isValidObjectId(productId)) return error(res, 404, 'Product not found', 'NOT_FOUND');
+    const product = await Product.findById(productId).select('status business');
+    if (!product || product.status !== 'active') return error(res, 404, 'Product not found', 'NOT_FOUND');
+    const visibleBusiness = await Business.exists({ _id: product.business, approvalStatus: 'approved', isActive: true });
+    if (!visibleBusiness) return error(res, 404, 'Product not found', 'NOT_FOUND');
+    const recentView = await Interaction.exists({ customer: req.user.userId, product: productId,
+      interactionType: 'view', createdAt: { $gte: new Date(Date.now() - 5 * 60000) } });
+    if (recentView) return success(res, 200, 'View already recorded', {});
+    await Interaction.create({ customer: req.user.userId, product: productId, interactionType: 'view' });
+    return success(res, 201, 'View recorded', {});
   } catch (err) {
     console.error('Log interaction error:', err);
     return error(res, 500, 'Error logging interaction', 'LOG_ERROR');
   }
 };
 
-module.exports = {
-  getRecommendations,
-  getSimilarProducts,
-  logInteraction,
-};
+module.exports = { getRecommendations, getSimilarProducts, logInteraction };

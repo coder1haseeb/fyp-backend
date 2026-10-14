@@ -35,9 +35,8 @@ router.post(
   [
     body('productId').notEmpty().withMessage('Product ID is required'),
     body('interactionType')
-      .isIn(['view', 'add_to_cart', 'purchase', 'search'])
-      .withMessage('Invalid interaction type'),
-    body('durationSeconds').optional().isInt({ min: 0 }).withMessage('Duration must be non-negative'),
+      .equals('view')
+      .withMessage('Only product views can be logged from the browser'),
   ],
   validate,
   recommendationController.logInteraction
