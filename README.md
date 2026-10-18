@@ -229,6 +229,8 @@ localbiz-backend/
 
 Wallet checkout is limited to one store per order. A wallet return to the frontend only displays the recorded payment status; it does not mark an order paid. Easypaisa settlement still requires a verified provider callback integration.
 
+Rapid Gateway sandbox checkout uses `RAPID_MERCHANT_ID`, `RAPID_CLIENT_ID`, and `RAPID_CLIENT_SECRET` on the backend. To receive payment results, add `RAPID_WEBHOOK_SALT` from Rapid Gateway's Settings → Webhooks page and deploy the backend on a public HTTPS host. Set the dashboard Endpoint URL to `https://YOUR_BACKEND_HOST/api/v1/payments/rapidgateway/webhook`, then send a test webhook from the dashboard. The endpoint verifies the raw body signature and timestamp, checks merchant, order, currency, and amount, and updates only pending payments. A checkout redirect by itself does not confirm payment.
+
 ### Return Routes `/api/v1/returns`
 
 | Method | Endpoint | Description |

@@ -70,7 +70,7 @@ const placeOrder = async (req, res) => {
       });
     }
 
-    if (['jazzcash', 'easypaisa'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
+    if (['jazzcash', 'easypaisa', 'rapidgateway'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
       return error(res, 400, 'Wallet checkout supports one store at a time. Please order from each store separately.', 'MULTI_STORE_WALLET');
     }
 

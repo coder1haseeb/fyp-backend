@@ -29,7 +29,14 @@ app.use(cors({
 }));
 
 // Body parsing
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buffer) => {
+    if (req.originalUrl.split('?')[0] === '/api/v1/payments/rapidgateway/webhook') {
+      req.rawBody = Buffer.from(buffer);
+    }
+  },
+}));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Rate Limiting for auth routes

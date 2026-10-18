@@ -17,7 +17,7 @@ router.post(
     body('deliveryAddress').notEmpty().withMessage('Delivery address is required'),
     body('deliveryAddress.street').notEmpty().withMessage('Street is required'),
     body('deliveryAddress.city').notEmpty().withMessage('City is required'),
-    body('paymentMethod').isIn(['jazzcash', 'easypaisa', 'cod', 'pay_at_store']).withMessage('Invalid payment method'),
+    body('paymentMethod').isIn(['jazzcash', 'easypaisa', 'rapidgateway', 'cod', 'pay_at_store']).withMessage('Invalid payment method'),
   ],
   validate,
   orderController.placeOrder

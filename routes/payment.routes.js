@@ -9,11 +9,22 @@ const validate = require('../middleware/validate');
 
 // Provider callback is authenticated with the JazzCash response signature.
 router.post('/notification', paymentController.jazzCashNotification);
+router.post('/rapidgateway/webhook', paymentController.rapidGatewayWebhook);
 
 // All customer routes require authentication.
 router.use(auth, authorize('customer'));
 
 // Initiate JazzCash payment
+router.post(
+  '/rapidgateway/initiate',
+  [
+    body('orderId').notEmpty().withMessage('Order ID is required'),
+    body('mobileNumber').matches(/^[0-9]{10,}$/).withMessage('Valid mobile number is required'),
+  ],
+  validate,
+  paymentController.initiateRapidGateway
+);
+
 router.post(
   '/jazzcash/initiate',
   [
