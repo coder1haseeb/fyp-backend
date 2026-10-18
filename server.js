@@ -32,7 +32,7 @@ app.use(cors({
 app.use(express.json({
   limit: '10mb',
   verify: (req, res, buffer) => {
-    if (req.originalUrl.split('?')[0] === '/api/v1/payments/rapidgateway/webhook') {
+    if (['/api/v1/payments/rapidgateway/webhook', '/api/v1/payments/safepay/webhook'].includes(req.originalUrl.split('?')[0])) {
       req.rawBody = Buffer.from(buffer);
     }
   },

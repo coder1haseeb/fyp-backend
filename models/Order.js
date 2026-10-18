@@ -47,7 +47,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['jazzcash', 'easypaisa', 'rapidgateway', 'cod', 'pay_at_store'],
+      enum: ['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store'],
       required: true,
     },
     paymentStatus: {

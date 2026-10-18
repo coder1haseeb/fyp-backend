@@ -15,6 +15,97 @@ const jazzCashHash = (fields) => crypto.createHash('sha256').update(
     .join('')
 ).digest('hex');
 
+const safepayClient = () => require('@sfpy/node-core')(process.env.SAFEPAY_SECRET_KEY, {
+  authType: 'secret',
+  host: 'https://sandbox.api.getsafepay.com',
+});
+
+const initiateSafepay = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!mongoose.isValidObjectId(orderId)) return error(res, 400, 'Invalid order ID', 'INVALID_ORDER');
+    const order = await Order.findOne({ _id: orderId, customer: req.user.userId, paymentMethod: 'safepay' });
+    if (!order) return error(res, 404, 'Order not found', 'NOT_FOUND');
+    const payment = await Payment.findOne({ order: orderId, method: 'safepay' });
+    if (!payment) return error(res, 404, 'Payment record not found', 'NOT_FOUND');
+    if (payment.status !== 'pending') return error(res, 400, 'Payment is not pending', 'INVALID_STATUS');
+    const { SAFEPAY_API_KEY, SAFEPAY_SECRET_KEY, CLIENT_URL } = process.env;
+    if (![SAFEPAY_API_KEY, SAFEPAY_SECRET_KEY, CLIENT_URL].every(Boolean)) {
+      return error(res, 503, 'Safepay sandbox is not configured', 'GATEWAY_NOT_CONFIGURED');
+    }
+    const safepay = safepayClient();
+    const session = await safepay.payments.session.setup({
+      merchant_api_key: SAFEPAY_API_KEY,
+      intent: 'CYBERSOURCE',
+      mode: 'payment',
+      entry_mode: 'raw',
+      currency: 'PKR',
+      amount: Math.round(payment.amount * 100),
+      metadata: { order_id: order.orderId },
+      include_fees: false,
+    });
+    const tracker = session?.data?.tracker?.token;
+    if (!tracker) return error(res, 502, 'Safepay did not create a payment session', 'GATEWAY_START_FAILED');
+    const passport = await safepay.client.passport.create();
+    if (!passport?.data) return error(res, 502, 'Safepay did not create a checkout token', 'GATEWAY_START_FAILED');
+    const returnUrl = `${CLIENT_URL.replace(/\/$/, '')}/payment/callback`;
+    const redirectUrl = safepay.checkout.createCheckoutUrl({
+      tracker,
+      tbt: passport.data,
+      env: 'sandbox',
+      source: 'hosted',
+      redirect_url: returnUrl,
+      cancel_url: returnUrl,
+    });
+    const parsedUrl = new URL(redirectUrl);
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'sandbox.api.getsafepay.com') {
+      return error(res, 502, 'Safepay returned an invalid checkout URL', 'GATEWAY_REDIRECT_INVALID');
+    }
+    payment.transactionReference = tracker;
+    await payment.save();
+    return success(res, 200, 'Payment initiated', { paymentId: payment._id, redirectUrl: parsedUrl.toString() });
+  } catch (err) {
+    console.error('Safepay initiation error:', err);
+    return error(res, 502, 'Could not start Safepay checkout', 'GATEWAY_ERROR');
+  }
+};
+
+const safepayWebhook = async (req, res) => {
+  try {
+    const secret = process.env.SAFEPAY_WEBHOOK_SECRET;
+    const signature = req.get('X-SFPY-SIGNATURE');
+    if (!secret || !req.rawBody || !/^[a-f0-9]{128}$/i.test(signature || '')) {
+      return error(res, 401, 'Invalid webhook signature', 'INVALID_SIGNATURE');
+    }
+    const expected = crypto.createHmac('sha512', secret).update(req.rawBody).digest('hex');
+    if (!crypto.timingSafeEqual(Buffer.from(signature.toLowerCase()), Buffer.from(expected))) {
+      return error(res, 401, 'Invalid webhook signature', 'INVALID_SIGNATURE');
+    }
+    const event = req.body;
+    if (event?.type !== 'payment.succeeded') return success(res, 200, 'Webhook ignored', {});
+    const data = event.data;
+    if (event.merchant_api_key !== process.env.SAFEPAY_API_KEY || !data?.tracker ||
+        data.currency !== 'PKR' || data.state !== 'TRACKER_ENDED') {
+      return error(res, 400, 'Payment details do not match', 'PAYMENT_MISMATCH');
+    }
+    const payment = await Payment.findOne({ method: 'safepay', transactionReference: data.tracker }).populate('order');
+    if (!payment?.order || Number(data.amount) !== Math.round(payment.amount * 100) ||
+        data.metadata?.order_id !== payment.order.orderId) {
+      return error(res, 400, 'Payment details do not match', 'PAYMENT_MISMATCH');
+    }
+    if (payment.status !== 'pending') return success(res, 200, 'Webhook already applied', {});
+    payment.status = 'paid';
+    payment.paidAt = new Date();
+    await payment.save();
+    const order = await Order.findByIdAndUpdate(payment.order._id, { paymentStatus: 'paid' }, { new: true });
+    if (order) for (const item of order.items) await recordInteraction(order.customer, item.product, 'purchase');
+    return success(res, 200, 'Webhook received', {});
+  } catch (err) {
+    console.error('Safepay webhook error:', err);
+    return error(res, 500, 'Could not process Safepay webhook', 'WEBHOOK_ERROR');
+  }
+};
+
 const initiateRapidGateway = async (req, res) => {
   try {
     const { orderId, mobileNumber } = req.body;
@@ -327,6 +418,8 @@ const jazzCashNotification = async (req, res) => {
 };
 
 module.exports = {
+  initiateSafepay,
+  safepayWebhook,
   initiateRapidGateway,
   rapidGatewayWebhook,
   initiateJazzCash,

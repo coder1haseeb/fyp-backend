@@ -19,6 +19,7 @@
   "author": "LocalBiz Team",
   "license": "MIT",
   "dependencies": {
+    "@sfpy/node-core": "^0.3.5",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",

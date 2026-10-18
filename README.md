@@ -486,3 +486,8 @@ MIT License - See LICENSE file for details
 **Version**: 1.0.0  
 **Last Updated**: April 2026  
 **Status**: Production Ready ✅
+# Safepay sandbox checkout
+
+Set `SAFEPAY_API_KEY`, `SAFEPAY_SECRET_KEY`, and `CLIENT_URL` in the backend `.env`. The API key starts with `sec_`. Set `SAFEPAY_WEBHOOK_SECRET` to the separate shared secret shown under Safepay sandbox Dashboard → Developer → Endpoints → View shared secret. Keep all keys out of Git.
+
+Create a Safepay sandbox endpoint at `https://YOUR-PUBLIC-BACKEND/api/v1/payments/safepay/webhook` and subscribe to `payment.succeeded` (version 2.0.0). A local server needs an HTTPS tunnel or a deployed public URL. Safepay's redirect only displays status; the signed webhook updates the order to paid. A failed payment attempt leaves the order pending because Safepay allows retries on the same checkout tracker.

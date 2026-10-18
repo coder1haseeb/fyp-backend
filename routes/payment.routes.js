@@ -10,11 +10,14 @@ const validate = require('../middleware/validate');
 // Provider callback is authenticated with the JazzCash response signature.
 router.post('/notification', paymentController.jazzCashNotification);
 router.post('/rapidgateway/webhook', paymentController.rapidGatewayWebhook);
+router.post('/safepay/webhook', paymentController.safepayWebhook);
 
 // All customer routes require authentication.
 router.use(auth, authorize('customer'));
 
 // Initiate JazzCash payment
+router.post('/safepay/initiate', [body('orderId').notEmpty().withMessage('Order ID is required')], validate, paymentController.initiateSafepay);
+
 router.post(
   '/rapidgateway/initiate',
   [
