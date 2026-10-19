@@ -195,6 +195,32 @@ const getOrders = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
+    const pendingSafepayOrders = orders.filter(order =>
+      order.paymentMethod === 'safepay' && order.paymentStatus === 'pending' && order.status !== 'cancelled'
+    );
+    if (pendingSafepayOrders.length) {
+      const byId = new Map(pendingSafepayOrders.map(order => [String(order._id), order]));
+      const payments = await Payment.find({
+        order: { $in: pendingSafepayOrders.map(order => order._id) },
+        method: 'safepay',
+      }).lean();
+      await Promise.all(payments.map(async payment => {
+        const order = byId.get(String(payment.order));
+        if (!order) return;
+        try {
+          if (payment.status === 'paid') {
+            await Order.findByIdAndUpdate(order._id, { paymentStatus: 'paid' });
+            order.paymentStatus = 'paid';
+          } else if (payment.status === 'pending' && payment.transactionReference &&
+                     await reconcileSafepayPayment({ ...payment, order })) {
+            order.paymentStatus = 'paid';
+          }
+        } catch (err) {
+          console.error('Safepay order list reconciliation error:', err);
+        }
+      }));
+    }
+
     return success(res, 200, 'Orders retrieved', {
       orders,
       pagination: {
