@@ -140,7 +140,5 @@ if __name__ == "__main__":
     output_path = Path(os.environ.get("RECOMMENDER_MODEL_PATH") or
                        ROOT / "artifacts" / "recommendation-ranker.json")
     with MongoClient(os.environ["MONGO_URI"], serverSelectionTimeoutMS=10000) as client:
-        database = client.get_default_database()
-        if database is None:
-            raise SystemExit("MONGO_URI must include a database name")
+        database = client.get_default_database(default=os.environ.get("MONGO_DB_NAME", "test"))
         train(load_groups(database), output_path)
