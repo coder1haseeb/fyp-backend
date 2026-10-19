@@ -1,0 +1,10 @@
+[
+  "content_similarity",
+  "collaborative_score",
+  "popularity",
+  "local_match",
+  "freshness",
+  "price_log",
+  "stock_log",
+  "prior_interest"
+]

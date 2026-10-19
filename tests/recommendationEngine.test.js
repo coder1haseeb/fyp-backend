@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { rankProducts, similarProducts } = require('../utils/recommendationEngine');
+const { rankProducts, similarProducts, FEATURE_NAMES } = require('../utils/recommendationEngine');
 
 const products = [
   { _id: 'soap', name: 'Charcoal soap', category: 'Bath', description: 'Handmade skin care', business: { city: 'Lahore' } },
@@ -30,4 +30,15 @@ test('similar results exclude the source and use product text', () => {
 test('previous purchases are omitted when alternatives exist', () => {
   const ranked = rankProducts({ products, interactions: [event('mine', 'soap', 'purchase')], customerId: 'mine', limit: 2 });
   assert.ok(ranked.every(product => product._id !== 'soap'));
+});
+
+test('candidate features are finite and match the training schema', () => {
+  const candidates = rankProducts({ products, interactions: [event('mine', 'soap', 'view')],
+    customerId: 'mine', limit: 3, withScores: true });
+  assert.equal(candidates.length, 3);
+  for (const candidate of candidates) {
+    assert.equal(candidate.features.length, FEATURE_NAMES.length);
+    assert.ok(candidate.features.every(Number.isFinite));
+    assert.ok(Number.isFinite(candidate.score));
+  }
 });

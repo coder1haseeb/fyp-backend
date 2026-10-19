@@ -1,9 +1,12 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Business = require('../models/Business');
 const Interaction = require('../models/Interaction');
+const RecommendationImpression = require('../models/RecommendationImpression');
 const { rankProducts, similarProducts } = require('../utils/recommendationEngine');
+const { rankWithLearnedModel } = require('../utils/learnedRecommendationRanker');
 const { success, error } = require('../utils/ApiResponse');
 
 const visibleCatalogue = async () => {
@@ -23,9 +26,27 @@ const getRecommendations = async (req, res) => {
         .sort({ createdAt: -1 }).limit(5000).lean(),
       Customer.findById(req.user.userId).select('city').lean(),
     ]);
-    const ranked = rankProducts({ products, interactions, customerId: req.user.userId,
-      customerCity: customer?.city || '', limit });
-    return success(res, 200, 'Recommendations retrieved', { products: ranked, count: ranked.length });
+    const candidates = rankProducts({ products, interactions, customerId: req.user.userId,
+      customerCity: customer?.city || '', limit: Math.max(limit, 30), withScores: true });
+    const ranking = rankWithLearnedModel(candidates);
+    const shown = ranking.candidates.slice(0, limit);
+    const requestId = crypto.randomUUID();
+    try {
+      if (shown.length) await RecommendationImpression.insertMany(shown.map((entry, position) => ({
+        requestId,
+        customer: req.user.userId,
+        product: entry.product._id,
+        position,
+        features: entry.features,
+        baselineScore: entry.score,
+        model: ranking.model,
+      })));
+    } catch (err) {
+      console.warn('Could not record recommendation impressions:', err.message);
+    }
+    return success(res, 200, 'Recommendations retrieved', {
+      products: shown.map(entry => entry.product), count: shown.length,
+    });
   } catch (err) {
     console.error('Get recommendations error:', err);
     return error(res, 500, 'Error retrieving recommendations', 'REC_ERROR');

@@ -6,7 +6,33 @@ A production-ready Node.js + Express.js REST API for LocalBiz - an AI-powered mu
 
 - **Multi-Role Architecture**: Customers, Business Admins, and Super Admins
 - **JWT Authentication**: Stateless, role-based access control
-- **AI Recommendations**: Hybrid content and behavior ranking with cold-start suggestions
+- **AI Recommendations**: Hybrid content and behavior ranking, with an optional learned LightGBM ranker
+
+## Recommendation model
+
+`GET /api/v1/recommendations` always has a working hybrid fallback. It uses product
+text, customer activity, peer activity, popularity, and city. The endpoint also
+records which products were shown, along with the numeric features used for
+ranking. Product views, cart additions, and purchases provide training labels.
+
+To train the optional LightGBM ranker, install the Python dependencies and run:
+
+```bash
+python -m pip install -r requirements-recommendations.txt
+python scripts/train_recommendations.py
+```
+
+The trainer reads `MONGO_URI` from `.env`, uses the last 90 days of impressions,
+and attributes actions occurring within 24 hours of each impression. It splits
+recommendation requests by time, trains on the earlier 80%, and compares
+NDCG@4 on the later 20% with the current hybrid ranking. At least 100 requests
+and 30 requests with positive feedback are required. A model is saved only if
+it improves NDCG@4 by at least 0.01; otherwise the existing ranker stays active.
+The Node API picks up a validated model automatically within 30 seconds. Run
+the trainer daily once sufficient traffic exists. Set `RECOMMENDER_MODEL_PATH`
+in both the trainer and API environment if the default `artifacts/recommendation-ranker.json`
+location is unsuitable. The generated artifact is ignored by Git and should
+be backed up or regenerated during deployment.
 - **Payment Integration**: JazzCash and Easypaisa sandbox support
 - **Inventory Management**: Real-time stock tracking and low-stock alerts
 - **Order Management**: Full order lifecycle with status tracking

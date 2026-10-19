@@ -1,6 +1,7 @@
 // Small-catalogue hybrid recommender. TF-IDF learns product content from the
 // current catalogue; customer and peer behaviour adjusts the ranking.
 const WEIGHTS = { view: 1, add_to_cart: 3, purchase: 6 };
+const FEATURE_NAMES = require('./recommendationFeatures.json');
 
 const tokens = product => `${product.name || ''} ${product.category || ''} ${product.description || ''}`
   .toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
@@ -35,7 +36,7 @@ const similarity = (left, right) => {
 
 const normalize = (value, maximum) => maximum > 0 ? value / maximum : 0;
 
-function rankProducts({ products, interactions = [], customerId, customerCity = '', limit = 10, excludeId }) {
+function rankProducts({ products, interactions = [], customerId, customerCity = '', limit = 10, excludeId, withScores = false }) {
   const vectors = buildVectors(products);
   const index = new Map(products.map((product, position) => [String(product._id), position]));
   const customerEvents = interactions.filter(event => String(event.customer) === String(customerId) && WEIGHTS[event.interactionType]);
@@ -92,12 +93,18 @@ function rankProducts({ products, interactions = [], customerId, customerCity = 
     const popular = normalize(popularity.get(id) || 0, maxPopularity);
     const local = customerCity && product.business?.city?.toLowerCase() === customerCity.toLowerCase() ? 1 : 0;
     const fresh = Math.exp(-Math.max(0, (now - new Date(product.createdAt || now).getTime()) / 86400000) / 90);
+    const features = [
+      content, collaborativeScore, popular, local, fresh,
+      Math.log1p(Math.max(0, Number(product.price) || 0)),
+      Math.log1p(Math.max(0, Number(product.stockQty) || 0)),
+      Math.log1p(seen.get(id) || 0),
+    ];
     const score = hasHistory
       ? 0.55 * content + 0.25 * collaborativeScore + 0.12 * popular + 0.05 * local + 0.03 * fresh
       : 0.65 * popular + 0.2 * local + 0.15 * fresh;
-    return { product, score };
+    return { product, score, features };
   }).sort((a, b) => b.score - a.score || String(a.product._id).localeCompare(String(b.product._id)))
-    .slice(0, limit).map(({ product }) => product);
+    .slice(0, limit).map(candidate => withScores ? candidate : candidate.product);
 }
 
 function similarProducts(products, source, limit = 5) {
@@ -110,4 +117,4 @@ function similarProducts(products, source, limit = 5) {
     .slice(0, limit).map(({ product }) => product);
 }
 
-module.exports = { rankProducts, similarProducts };
+module.exports = { rankProducts, similarProducts, FEATURE_NAMES };
