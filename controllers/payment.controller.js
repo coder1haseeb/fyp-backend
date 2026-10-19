@@ -20,6 +20,11 @@ const safepayClient = () => require('@sfpy/node-core')(process.env.SAFEPAY_SECRE
   host: 'https://sandbox.api.getsafepay.com',
 });
 
+const safepayOrderId = (metadata) => {
+  const orderId = metadata?.order_id;
+  return typeof orderId === 'string' ? orderId : orderId?.value;
+};
+
 const applySafepaySuccess = async (payment) => {
   const updated = await Payment.findOneAndUpdate(
     { _id: payment._id, status: 'pending' },
@@ -57,7 +62,7 @@ const reconcileSafepayPayment = async (payment) => {
   const quote = tracker.purchase_totals?.quote_amount;
   if (tracker.token !== payment.transactionReference || tracker.environment !== 'sandbox' ||
       tracker.client?.api_key !== process.env.SAFEPAY_API_KEY ||
-      tracker.metadata?.order_id !== payment.order.orderId ||
+      safepayOrderId(tracker.metadata) !== payment.order.orderId ||
       quote?.currency !== 'PKR' || Number(quote.amount) !== Math.round(payment.amount * 100)) {
     throw new Error('Safepay tracker does not match the payment');
   }
@@ -148,7 +153,7 @@ const safepayWebhook = async (req, res) => {
     const payment = await Payment.findOne({ method: 'safepay', transactionReference: data.tracker }).populate('order');
     if (!payment?.order || payment.order.status === 'cancelled' ||
         Number(data.amount) !== Math.round(payment.amount * 100) ||
-        data.metadata?.order_id !== payment.order.orderId) {
+        safepayOrderId(data.metadata) !== payment.order.orderId) {
       return error(res, 400, 'Payment details do not match', 'PAYMENT_MISMATCH');
     }
     if (payment.status !== 'pending') return success(res, 200, 'Webhook already applied', {});
