@@ -58,7 +58,10 @@ function score(model, features) {
 
 function rankWithLearnedModel(candidates) {
   const model = loadModel();
-  if (!model) return { candidates, model: 'hybrid' };
+  if (!model || (model.training_source === 'synthetic_demo' &&
+      Date.now() >= Date.parse(model.demo_expires_at))) {
+    return { candidates, model: 'hybrid' };
+  }
   try {
     return {
       model: 'lightgbm',

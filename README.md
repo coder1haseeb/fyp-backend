@@ -33,6 +33,15 @@ the trainer daily once sufficient traffic exists. Set `RECOMMENDER_MODEL_PATH`
 in both the trainer and API environment if the default `artifacts/recommendation-ranker.json`
 location is unsuitable. The generated artifact is ignored by Git and should
 be backed up or regenerated during deployment.
+
+For a presentation with too little real feedback, run
+`python scripts/seed_demo_recommendations.py --activate`. This creates 640
+clearly marked synthetic rows in the separate MongoDB
+`recommendationtrainingseeds` collection and trains a demo model. It does not
+add fake customer impressions or interactions. The demo artifact expires after
+48 hours, when the API automatically returns to the hybrid ranker unless a
+real-data model has replaced it. Demo holdout scores measure only synthetic
+feedback and must not be presented as real customer performance.
 - **Payment Integration**: JazzCash and Easypaisa sandbox support
 - **Inventory Management**: Real-time stock tracking and low-stock alerts
 - **Order Management**: Full order lifecycle with status tracking
