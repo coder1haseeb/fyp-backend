@@ -194,16 +194,27 @@ module.exports = {
 // Get all public active products (for customer browsing)
 async function getPublicProducts(req, res) {
   try {
-    const { limit = 10, page = 1 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { limit = 10, page = 1, search = '' } = req.query;
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNumber - 1) * pageSize;
 
     const approvedBusinesses = await Business.find({ approvalStatus: 'approved', isActive: true }).distinct('_id');
-    const query = { status: 'active', business: { $in: approvedBusinesses } };
+    const query = { status: 'active', stockQty: { $gt: 0 }, business: { $in: approvedBusinesses } };
+    const term = String(search).trim().slice(0, 80);
+    if (term) {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { category: { $regex: escaped, $options: 'i' } },
+      ];
+    }
     const products = await Product.find(query)
       .populate('business', 'storeName logo city')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(pageSize)
       .lean();
 
     const total = await Product.countDocuments(query);
@@ -214,9 +225,9 @@ async function getPublicProducts(req, res) {
       products,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit)),
+        page: pageNumber,
+        limit: pageSize,
+        pages: Math.ceil(total / pageSize),
       },
     });
   } catch (err) {

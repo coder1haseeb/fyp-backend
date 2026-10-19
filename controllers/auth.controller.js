@@ -251,7 +251,13 @@ const verifyEmail = async (req, res) => {
     await customer.save();
 
     return success(res, 200, 'Email verified successfully', {
-      message: 'You can now login',
+      token: generateToken(customer._id, 'customer'),
+      user: {
+        id: customer._id,
+        fullName: customer.fullName,
+        email: customer.email,
+        role: 'customer',
+      },
     });
   } catch (err) {
     console.error('Verify email error:', err);

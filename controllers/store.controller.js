@@ -17,9 +17,10 @@ const getStores = async (req, res) => {
     if (category) query.category = category;
     if (rating) query.rating = { $gte: parseFloat(rating) };
     if (search) {
+      const escaped = String(search).trim().slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { storeName: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { storeName: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
       ];
     }
 
@@ -72,6 +73,8 @@ const getStoreById = async (req, res) => {
 const getStoreProducts = async (req, res) => {
   try {
     const { storeId } = req.params;
+    const visibleStore = await Business.exists({ _id: storeId, approvalStatus: 'approved', isActive: true });
+    if (!visibleStore) return error(res, 404, 'Store not found', 'NOT_FOUND');
     const { category, page = 1, limit = 10, search } = req.query;
     const skip = (page - 1) * limit;
 

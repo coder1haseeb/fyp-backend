@@ -1,5 +1,6 @@
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+const Business = require('../models/Business');
 const recordInteraction = require('../utils/recordInteraction');
 const { success, error } = require('../utils/ApiResponse');
 
@@ -41,6 +42,8 @@ const addToCart = async (req, res) => {
       return error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
     }
 
+    const visibleBusiness = await Business.exists({ _id: product.business, approvalStatus: 'approved', isActive: true });
+    if (!visibleBusiness) return error(res, 404, 'Product not found', 'PRODUCT_NOT_FOUND');
     if (product.stockQty < quantity) {
       return error(res, 400, 'Insufficient stock', 'INSUFFICIENT_STOCK');
     }
@@ -55,6 +58,9 @@ const addToCart = async (req, res) => {
     const existingItem = cart.items.find((item) => item.product.toString() === productId);
 
     if (existingItem) {
+      if (existingItem.quantity + quantity > product.stockQty) {
+        return error(res, 400, 'Insufficient stock', 'INSUFFICIENT_STOCK');
+      }
       existingItem.quantity += quantity;
     } else {
       cart.items.push({
