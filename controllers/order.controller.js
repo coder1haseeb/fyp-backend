@@ -7,6 +7,7 @@ const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
 const checkLowStockAndNotify = require('../utils/stockAlertChecker');
 const recordInteraction = require('../utils/recordInteraction');
+const { reconcileSafepayPayment } = require('./payment.controller');
 
 // Helper: Generate Order ID
 const generateOrderId = async () => {
@@ -223,8 +224,17 @@ const getOrderById = async (req, res) => {
     if (!order || order.customer._id.toString() !== customerId) {
       return error(res, 404, 'Order not found', 'NOT_FOUND');
     }
+    const payment = await Payment.findOne({ order: order._id });
+    if (payment?.method === 'safepay' && payment.status === 'pending' && order.paymentStatus === 'pending') {
+      try {
+        if (await reconcileSafepayPayment({ ...payment.toObject(), order })) order.paymentStatus = 'paid';
+      } catch (err) {
+        console.error('Safepay order reconciliation error:', err);
+      }
+    }
 
-    return success(res, 200, 'Order retrieved', order);
+    res.set('Cache-Control', 'no-store');
+    return success(res, 200, 'Order retrieved', { ...order.toObject(), paymentId: payment?._id });
   } catch (err) {
     console.error('Get order by ID error:', err);
     return error(res, 500, 'Error retrieving order', 'GET_ORDER_ERROR');

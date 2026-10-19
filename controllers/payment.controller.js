@@ -20,6 +20,44 @@ const safepayClient = () => require('@sfpy/node-core')(process.env.SAFEPAY_SECRE
   host: 'https://sandbox.api.getsafepay.com',
 });
 
+const applySafepaySuccess = async (payment) => {
+  const updated = await Payment.findOneAndUpdate(
+    { _id: payment._id, status: 'pending' },
+    { status: 'paid', paidAt: new Date() },
+    { new: true }
+  );
+  if (!updated) return false;
+  const order = await Order.findByIdAndUpdate(payment.order._id, { paymentStatus: 'paid' }, { new: true });
+  if (order) {
+    for (const item of order.items) {
+      try {
+        await recordInteraction(order.customer, item.product, 'purchase');
+      } catch (err) {
+        console.error('Could not record Safepay purchase interaction:', err);
+      }
+    }
+  }
+  return true;
+};
+
+const reconcileSafepayPayment = async (payment) => {
+  if (payment.status !== 'pending' || !payment.transactionReference || !payment.order ||
+      payment.order.status === 'cancelled' ||
+      !process.env.SAFEPAY_SECRET_KEY || !process.env.SAFEPAY_API_KEY) return false;
+  const response = await safepayClient().reporter.payments.fetch(payment.transactionReference);
+  // The current Node SDK returns the tracker directly in data; older responses nest it.
+  const tracker = response?.data?.tracker || response?.data;
+  if (tracker?.state !== 'TRACKER_ENDED') return false;
+  const quote = tracker.purchase_totals?.quote_amount;
+  if (tracker.token !== payment.transactionReference || tracker.environment !== 'sandbox' ||
+      tracker.client?.api_key !== process.env.SAFEPAY_API_KEY ||
+      tracker.metadata?.order_id !== payment.order.orderId ||
+      quote?.currency !== 'PKR' || Number(quote.amount) !== Math.round(payment.amount * 100)) {
+    throw new Error('Safepay tracker does not match the payment');
+  }
+  return applySafepaySuccess(payment);
+};
+
 const initiateSafepay = async (req, res) => {
   try {
     const { orderId } = req.body;
@@ -28,23 +66,36 @@ const initiateSafepay = async (req, res) => {
     if (!order) return error(res, 404, 'Order not found', 'NOT_FOUND');
     const payment = await Payment.findOne({ order: orderId, method: 'safepay' });
     if (!payment) return error(res, 404, 'Payment record not found', 'NOT_FOUND');
-    if (payment.status !== 'pending') return error(res, 400, 'Payment is not pending', 'INVALID_STATUS');
+    if (order.status === 'cancelled') return error(res, 400, 'Cancelled orders cannot be paid', 'ORDER_CANCELLED');
+    if (payment.status !== 'pending' || order.paymentStatus !== 'pending') {
+      return error(res, 400, 'Payment is not pending', 'INVALID_STATUS');
+    }
     const { SAFEPAY_API_KEY, SAFEPAY_SECRET_KEY, CLIENT_URL } = process.env;
     if (![SAFEPAY_API_KEY, SAFEPAY_SECRET_KEY, CLIENT_URL].every(Boolean)) {
       return error(res, 503, 'Safepay sandbox is not configured', 'GATEWAY_NOT_CONFIGURED');
     }
+    if (payment.transactionReference) {
+      await reconcileSafepayPayment({ ...payment.toObject(), order });
+      const updated = await Payment.findById(payment._id);
+      if (updated?.status === 'paid') {
+        return success(res, 200, 'Payment already confirmed', { paymentId: payment._id, status: 'paid' });
+      }
+    }
     const safepay = safepayClient();
-    const session = await safepay.payments.session.setup({
-      merchant_api_key: SAFEPAY_API_KEY,
-      intent: 'CYBERSOURCE',
-      mode: 'payment',
-      entry_mode: 'raw',
-      currency: 'PKR',
-      amount: Math.round(payment.amount * 100),
-      metadata: { order_id: order.orderId },
-      include_fees: false,
-    });
-    const tracker = session?.data?.tracker?.token;
+    let tracker = payment.transactionReference;
+    if (!tracker) {
+      const session = await safepay.payments.session.setup({
+        merchant_api_key: SAFEPAY_API_KEY,
+        intent: 'CYBERSOURCE',
+        mode: 'payment',
+        entry_mode: 'raw',
+        currency: 'PKR',
+        amount: Math.round(payment.amount * 100),
+        metadata: { order_id: order.orderId },
+        include_fees: false,
+      });
+      tracker = session?.data?.tracker?.token;
+    }
     if (!tracker) return error(res, 502, 'Safepay did not create a payment session', 'GATEWAY_START_FAILED');
     const passport = await safepay.client.passport.create();
     if (!passport?.data) return error(res, 502, 'Safepay did not create a checkout token', 'GATEWAY_START_FAILED');
@@ -89,16 +140,13 @@ const safepayWebhook = async (req, res) => {
       return error(res, 400, 'Payment details do not match', 'PAYMENT_MISMATCH');
     }
     const payment = await Payment.findOne({ method: 'safepay', transactionReference: data.tracker }).populate('order');
-    if (!payment?.order || Number(data.amount) !== Math.round(payment.amount * 100) ||
+    if (!payment?.order || payment.order.status === 'cancelled' ||
+        Number(data.amount) !== Math.round(payment.amount * 100) ||
         data.metadata?.order_id !== payment.order.orderId) {
       return error(res, 400, 'Payment details do not match', 'PAYMENT_MISMATCH');
     }
     if (payment.status !== 'pending') return success(res, 200, 'Webhook already applied', {});
-    payment.status = 'paid';
-    payment.paidAt = new Date();
-    await payment.save();
-    const order = await Order.findByIdAndUpdate(payment.order._id, { paymentStatus: 'paid' }, { new: true });
-    if (order) for (const item of order.items) await recordInteraction(order.customer, item.product, 'purchase');
+    await applySafepaySuccess(payment);
     return success(res, 200, 'Webhook received', {});
   } catch (err) {
     console.error('Safepay webhook error:', err);
@@ -363,13 +411,27 @@ const getPaymentStatus = async (req, res) => {
   try {
     const { paymentId } = req.params;
 
-    const payment = await Payment.findById(paymentId).populate('order').lean();
+    const payment = await Payment.findById(paymentId).populate('order');
 
     if (!payment) {
       return error(res, 404, 'Payment not found', 'NOT_FOUND');
     }
-    if (payment.order.customer.toString() !== req.user.userId) {
+    if (!payment.order || payment.order.customer.toString() !== req.user.userId) {
       return error(res, 403, 'Not authorized to view this payment', 'UNAUTHORIZED');
+    }
+    res.set('Cache-Control', 'no-store');
+
+    if (payment.method === 'safepay' && payment.status === 'pending') {
+      try {
+        await reconcileSafepayPayment(payment);
+        const updated = await Payment.findById(paymentId);
+        if (updated) {
+          payment.status = updated.status;
+          payment.paidAt = updated.paidAt;
+        }
+      } catch (err) {
+        console.error('Safepay status reconciliation error:', err);
+      }
     }
 
     return success(res, 200, 'Payment status retrieved', {
@@ -418,6 +480,7 @@ const jazzCashNotification = async (req, res) => {
 };
 
 module.exports = {
+  reconcileSafepayPayment,
   initiateSafepay,
   safepayWebhook,
   initiateRapidGateway,
