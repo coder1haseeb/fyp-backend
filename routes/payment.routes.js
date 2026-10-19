@@ -50,6 +50,8 @@ router.post(
 );
 
 // Get payment status
+router.get('/safepay/tracker/:tracker/status', paymentController.getSafepayTrackerStatus);
+
 router.get(
   '/:paymentId/status',
   [param('paymentId').notEmpty().withMessage('Payment ID is required')],

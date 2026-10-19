@@ -44,7 +44,13 @@ const reconcileSafepayPayment = async (payment) => {
   if (payment.status !== 'pending' || !payment.transactionReference || !payment.order ||
       payment.order.status === 'cancelled' ||
       !process.env.SAFEPAY_SECRET_KEY || !process.env.SAFEPAY_API_KEY) return false;
-  const response = await safepayClient().reporter.payments.fetch(payment.transactionReference);
+  let timeout;
+  const response = await Promise.race([
+    safepayClient().reporter.payments.fetch(payment.transactionReference),
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Safepay status lookup timed out')), 10000);
+    }),
+  ]).finally(() => clearTimeout(timeout));
   // The current Node SDK returns the tracker directly in data; older responses nest it.
   const tracker = response?.data?.tracker || response?.data;
   if (tracker?.state !== 'TRACKER_ENDED') return false;
@@ -407,6 +413,22 @@ const initiateEasypaisa = async (req, res) => {
 };
 
 // Get Payment Status
+const getSafepayTrackerStatus = async (req, res) => {
+  const { tracker } = req.params;
+  if (!/^track_[a-zA-Z0-9-]+$/.test(tracker)) {
+    return error(res, 400, 'Invalid Safepay tracker', 'INVALID_TRACKER');
+  }
+  try {
+    const payment = await Payment.findOne({ method: 'safepay', transactionReference: tracker });
+    if (!payment) return error(res, 404, 'Payment not found', 'NOT_FOUND');
+    req.params.paymentId = String(payment._id);
+    return getPaymentStatus(req, res);
+  } catch (err) {
+    console.error('Safepay tracker lookup error:', err);
+    return error(res, 500, 'Could not retrieve payment status', 'STATUS_ERROR');
+  }
+};
+
 const getPaymentStatus = async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -481,6 +503,7 @@ const jazzCashNotification = async (req, res) => {
 
 module.exports = {
   reconcileSafepayPayment,
+  getSafepayTrackerStatus,
   initiateSafepay,
   safepayWebhook,
   initiateRapidGateway,
