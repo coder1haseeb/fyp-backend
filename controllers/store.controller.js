@@ -2,6 +2,31 @@ const Business = require('../models/Business');
 const Product = require('../models/Product');
 const { success, error } = require('../utils/ApiResponse');
 
+const getNearbyStores = async (req, res) => {
+  try {
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+    const radiusKm = Number(req.query.radiusKm || 5);
+    const limit = Number(req.query.limit || 20);
+    const stores = await Business.aggregate([
+      { $geoNear: {
+        near: { type: 'Point', coordinates: [longitude, latitude] },
+        distanceField: 'distanceMeters',
+        maxDistance: radiusKm * 1000,
+        spherical: true,
+        key: 'location',
+        query: { approvalStatus: 'approved', isActive: true },
+      } },
+      { $limit: limit },
+      { $project: { storeName: 1, category: 1, description: 1, logo: 1, coverImage: 1, address: 1, city: 1, location: 1, rating: 1, distanceKm: { $round: [{ $divide: ['$distanceMeters', 1000] }, 2] } } },
+    ]);
+    return success(res, 200, 'Nearby stores retrieved', { stores });
+  } catch (err) {
+    console.error('Get nearby stores error:', err);
+    return error(res, 500, 'Error retrieving nearby stores', 'NEARBY_STORES_ERROR');
+  }
+};
+
 // Get All Stores
 const getStores = async (req, res) => {
   try {
@@ -114,6 +139,7 @@ const getStoreProducts = async (req, res) => {
 };
 
 module.exports = {
+  getNearbyStores,
   getStores,
   getStoreById,
   getStoreProducts,

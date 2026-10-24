@@ -7,6 +7,7 @@ const { success, error } = require('../utils/ApiResponse');
 const generateToken = require('../utils/generateToken');
 const generateOTP = require('../utils/generateOTP');
 const sendOTPEmail = require('../utils/sendEmail');
+const { parseStoreLocation } = require('../utils/storeLocation');
 
 // Register Customer
 const registerCustomer = async (req, res) => {
@@ -60,6 +61,8 @@ const registerCustomer = async (req, res) => {
 // Register Business Owner & Store
 const registerBusiness = async (req, res) => {
   try {
+    const location = parseStoreLocation(req.body.location);
+    if (!location) return error(res, 400, 'Confirm the store location on the map', 'INVALID_LOCATION');
     const {
       fullName,
       email,
@@ -99,6 +102,7 @@ const registerBusiness = async (req, res) => {
       description,
       address,
       city,
+      location,
       phone: storePhone,
       logo: req.body.logo || '',
       owner: owner._id,

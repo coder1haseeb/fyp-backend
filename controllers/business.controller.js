@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Return = require('../models/Return');
 const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
+const { parseStoreLocation } = require('../utils/storeLocation');
 
 const validStoreImage = value => typeof value === 'string' && (
   value === '' || /^https?:\/\//i.test(value) ||
@@ -34,7 +35,7 @@ const getBusinessProfile = async (req, res) => {
 const updateBusinessProfile = async (req, res) => {
   try {
     const businessId = req.user.businessId;
-    const { storeName, description, address, city, phone, logo, coverImage, operatingHours } = req.body;
+    const { storeName, description, address, city, phone, logo, coverImage, operatingHours, location } = req.body;
 
     const business = await Business.findById(businessId);
 
@@ -45,6 +46,12 @@ const updateBusinessProfile = async (req, res) => {
     if ((logo !== undefined && !validStoreImage(logo)) ||
         (coverImage !== undefined && !validStoreImage(coverImage))) {
       return error(res, 400, 'Store images must be JPG, PNG, or WebP and smaller than 2 MB', 'INVALID_IMAGE');
+    }
+
+    if (location !== undefined) {
+      const parsedLocation = parseStoreLocation(location);
+      if (!parsedLocation) return error(res, 400, 'Choose a valid store location', 'INVALID_LOCATION');
+      business.location = parsedLocation;
     }
 
     if (storeName) business.storeName = storeName;

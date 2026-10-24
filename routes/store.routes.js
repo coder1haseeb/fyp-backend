@@ -5,6 +5,13 @@ const router = express.Router();
 const storeController = require('../controllers/store.controller');
 const validate = require('../middleware/validate');
 
+router.get('/nearby', [
+  query('latitude').isFloat({ min: -90, max: 90 }),
+  query('longitude').isFloat({ min: -180, max: 180 }),
+  query('radiusKm').optional().isFloat({ min: 0.1, max: 50 }),
+  query('limit').optional().isInt({ min: 1, max: 50 }),
+], validate, storeController.getNearbyStores);
+
 // Get all stores
 router.get(
   '/',

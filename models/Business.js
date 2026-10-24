@@ -32,6 +32,19 @@ const businessSchema = new mongoose.Schema(
       type: String,
       required: [true, 'City is required'],
     },
+    location: { type: new mongoose.Schema({
+      type: { type: String, enum: ['Point'], required: true },
+      coordinates: {
+        type: [Number],
+        required: true,
+        validate: {
+          validator: value => Array.isArray(value) && value.length === 2 &&
+            Number.isFinite(value[0]) && value[0] >= -180 && value[0] <= 180 &&
+            Number.isFinite(value[1]) && value[1] >= -90 && value[1] <= 90,
+          message: 'Invalid store coordinates',
+        },
+      },
+    }, { _id: false }), default: undefined },
     phone: {
       type: String,
       required: [true, 'Phone is required'],
@@ -73,5 +86,7 @@ const businessSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+businessSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('Business', businessSchema);
