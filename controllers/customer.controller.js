@@ -100,13 +100,11 @@ const updateAddress = async (req, res) => {
       });
     }
 
-    customer.addresses[addressIndex] = {
-      ...customer.addresses[addressIndex],
-      label,
-      street,
-      city,
-      isDefault: isDefault !== undefined ? isDefault : customer.addresses[addressIndex].isDefault,
-    };
+    const address = customer.addresses[addressIndex];
+    if (label !== undefined) address.label = label;
+    if (street !== undefined) address.street = street;
+    if (city !== undefined) address.city = city;
+    if (isDefault !== undefined) address.isDefault = isDefault;
 
     await customer.save();
 

@@ -53,6 +53,24 @@ const getProof = async (req, res) => {
   }
 };
 
+const getCustomerProof = async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.orderId, customer: req.user.userId, paymentMethod: 'bank_transfer' });
+    if (!order) return error(res, 404, 'Bank transfer order not found', 'NOT_FOUND');
+    const payment = await Payment.findOne({ order: order._id, method: 'bank_transfer' }).select('+proofImage');
+    if (!payment) return error(res, 404, 'Payment record not found', 'NOT_FOUND');
+    res.set('Cache-Control', 'no-store');
+    return success(res, 200, 'Payment proof retrieved', {
+      proofImage: payment.proofImage,
+      proofStatus: payment.proofStatus,
+      proofSubmittedAt: payment.proofSubmittedAt,
+    });
+  } catch (err) {
+    console.error('Get customer payment proof error:', err);
+    return error(res, 500, 'Could not retrieve payment proof', 'PROOF_GET_ERROR');
+  }
+};
+
 const reviewProof = async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.orderId, business: req.user.businessId, paymentMethod: 'bank_transfer' });
@@ -94,4 +112,4 @@ const reviewProof = async (req, res) => {
   }
 };
 
-module.exports = { uploadProof, getProof, reviewProof };
+module.exports = { uploadProof, getProof, getCustomerProof, reviewProof };

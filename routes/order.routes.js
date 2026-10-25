@@ -18,6 +18,9 @@ router.post(
     body('deliveryAddress').notEmpty().withMessage('Delivery address is required'),
     body('deliveryAddress.street').notEmpty().withMessage('Street is required'),
     body('deliveryAddress.city').notEmpty().withMessage('City is required'),
+    body('contact.fullName').trim().notEmpty().withMessage('Contact name is required'),
+    body('contact.email').isEmail().withMessage('Valid contact email is required'),
+    body('contact.phone').matches(/^[0-9]{10,}$/).withMessage('Valid contact phone is required'),
     body('paymentMethod').isIn(['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store', 'bank_transfer']).withMessage('Invalid payment method'),
   ],
   validate,
@@ -48,6 +51,7 @@ router.get(
 );
 
 router.post('/:orderId/payment-proof', [param('orderId').isMongoId()], validate, bankTransfer.uploadProof);
+router.get('/:orderId/payment-proof', [param('orderId').isMongoId()], validate, bankTransfer.getCustomerProof);
 
 // Cancel order
 router.put(

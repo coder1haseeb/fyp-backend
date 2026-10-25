@@ -45,6 +45,11 @@ const orderSchema = new mongoose.Schema(
       street: String,
       city: String,
     },
+    contact: {
+      fullName: String,
+      email: String,
+      phone: String,
+    },
     paymentMethod: {
       type: String,
       enum: ['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store', 'bank_transfer'],

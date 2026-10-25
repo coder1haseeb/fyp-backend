@@ -28,7 +28,7 @@ const generateInvoiceId = async () => {
 // Place Order
 const placeOrder = async (req, res) => {
   try {
-    const { deliveryAddress, paymentMethod, notes } = req.body;
+    const { deliveryAddress, paymentMethod, notes, contact } = req.body;
     const customerId = req.user.userId;
 
     // Get cart
@@ -104,6 +104,7 @@ const placeOrder = async (req, res) => {
           total,
         })),
         deliveryAddress,
+        contact: { fullName: contact.fullName.trim(), email: contact.email.trim().toLowerCase(), phone: contact.phone.trim() },
         paymentMethod,
         paymentStatus: paymentMethod === 'cod' || paymentMethod === 'pay_at_store' ? 'pending' : 'pending',
         status: 'pending',
@@ -227,6 +228,14 @@ const getOrders = async (req, res) => {
           console.error('Safepay order list reconciliation error:', err);
         }
       }));
+    }
+
+    const bankOrders = orders.filter(order => order.paymentMethod === 'bank_transfer');
+    if (bankOrders.length) {
+      const proofs = await Payment.find({ order: { $in: bankOrders.map(order => order._id) }, method: 'bank_transfer' })
+        .select('order proofStatus').lean();
+      const proofByOrder = new Map(proofs.map(payment => [String(payment.order), payment.proofStatus]));
+      for (const order of bankOrders) order.proofStatus = proofByOrder.get(String(order._id)) || 'none';
     }
 
     return success(res, 200, 'Orders retrieved', {
