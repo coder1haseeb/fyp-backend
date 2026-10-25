@@ -50,6 +50,12 @@ const businessSchema = new mongoose.Schema(
       required: [true, 'Phone is required'],
       match: [/^[0-9]{10,}$/, 'Please provide a valid phone number'],
     },
+    bankDetails: {
+      bankName: { type: String, default: '' },
+      accountName: { type: String, default: '' },
+      accountNumber: { type: String, default: '' },
+      iban: { type: String, default: '' },
+    },
     operatingHours: {
       type: Map,
       of: String,

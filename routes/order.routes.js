@@ -6,6 +6,7 @@ const orderController = require('../controllers/order.controller');
 const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
+const bankTransfer = require('../controllers/bankTransfer.controller');
 
 // All routes require customer auth
 router.use(auth, authorize('customer'));
@@ -17,7 +18,7 @@ router.post(
     body('deliveryAddress').notEmpty().withMessage('Delivery address is required'),
     body('deliveryAddress.street').notEmpty().withMessage('Street is required'),
     body('deliveryAddress.city').notEmpty().withMessage('City is required'),
-    body('paymentMethod').isIn(['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store']).withMessage('Invalid payment method'),
+    body('paymentMethod').isIn(['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store', 'bank_transfer']).withMessage('Invalid payment method'),
   ],
   validate,
   orderController.placeOrder
@@ -45,6 +46,8 @@ router.get(
   validate,
   orderController.getOrderById
 );
+
+router.post('/:orderId/payment-proof', [param('orderId').isMongoId()], validate, bankTransfer.uploadProof);
 
 // Cancel order
 router.put(

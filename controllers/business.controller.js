@@ -1,6 +1,7 @@
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
+const Payment = require('../models/Payment');
 const Return = require('../models/Return');
 const { success, error } = require('../utils/ApiResponse');
 const createNotification = require('../utils/createNotification');
@@ -35,7 +36,7 @@ const getBusinessProfile = async (req, res) => {
 const updateBusinessProfile = async (req, res) => {
   try {
     const businessId = req.user.businessId;
-    const { storeName, description, address, city, phone, logo, coverImage, operatingHours, location } = req.body;
+    const { storeName, description, address, city, phone, logo, coverImage, operatingHours, location, bankDetails } = req.body;
 
     const business = await Business.findById(businessId);
 
@@ -62,6 +63,14 @@ const updateBusinessProfile = async (req, res) => {
     if (logo !== undefined) business.logo = logo;
     if (coverImage !== undefined) business.coverImage = coverImage;
     if (operatingHours) business.operatingHours = new Map(Object.entries(operatingHours));
+    if (bankDetails !== undefined) {
+      const fields = ['bankName', 'accountName', 'accountNumber', 'iban'];
+      if (!bankDetails || typeof bankDetails !== 'object' || Array.isArray(bankDetails) ||
+          fields.some(field => typeof bankDetails[field] !== 'string' || bankDetails[field].trim().length > 100)) {
+        return error(res, 400, 'Enter valid bank details (maximum 100 characters per field)', 'INVALID_BANK_DETAILS');
+      }
+      business.bankDetails = Object.fromEntries(fields.map(field => [field, bankDetails[field].trim()]));
+    }
 
     await business.save();
 
@@ -209,6 +218,12 @@ const getOrders = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
+
+    const bankOrders = orders.filter(order => order.paymentMethod === 'bank_transfer');
+    const proofs = bankOrders.length ? await Payment.find({ order: { $in: bankOrders.map(order => order._id) } })
+      .select('order proofStatus').lean() : [];
+    const proofByOrder = new Map(proofs.map(payment => [String(payment.order), payment.proofStatus]));
+    for (const order of bankOrders) order.proofStatus = proofByOrder.get(String(order._id)) || 'none';
 
     return success(res, 200, 'Orders retrieved', {
       orders,

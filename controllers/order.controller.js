@@ -71,8 +71,16 @@ const placeOrder = async (req, res) => {
       });
     }
 
-    if (['jazzcash', 'easypaisa', 'rapidgateway', 'safepay'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
+    if (['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'bank_transfer'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
       return error(res, 400, 'Wallet checkout supports one store at a time. Please order from each store separately.', 'MULTI_STORE_WALLET');
+    }
+
+    if (paymentMethod === 'bank_transfer') {
+      const business = await Business.findById(Object.keys(ordersByBusiness)[0]).select('bankDetails');
+      const details = business?.bankDetails;
+      if (!details?.bankName || !details?.accountName || !details?.accountNumber || !details?.iban) {
+        return error(res, 400, 'This store has not set up bank transfer details yet', 'BANK_DETAILS_MISSING');
+      }
     }
 
     // Create orders and payments
@@ -244,7 +252,7 @@ const getOrderById = async (req, res) => {
 
     const order = await Order.findById(orderId)
       .populate('customer', 'fullName email phone')
-      .populate('business', 'storeName phone address city')
+      .populate('business', 'storeName phone address city bankDetails')
       .populate('items.product', 'name price images');
 
     if (!order || order.customer._id.toString() !== customerId) {
@@ -260,7 +268,7 @@ const getOrderById = async (req, res) => {
     }
 
     res.set('Cache-Control', 'no-store');
-    return success(res, 200, 'Order retrieved', { ...order.toObject(), paymentId: payment?._id });
+    return success(res, 200, 'Order retrieved', { ...order.toObject(), paymentId: payment?._id, proofStatus: payment?.proofStatus || 'none' });
   } catch (err) {
     console.error('Get order by ID error:', err);
     return error(res, 500, 'Error retrieving order', 'GET_ORDER_ERROR');

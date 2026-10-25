@@ -6,6 +6,7 @@ const businessController = require('../controllers/business.controller');
 const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
+const bankTransfer = require('../controllers/bankTransfer.controller');
 
 // All routes require business_admin auth
 router.use(auth, authorize('business_admin'));
@@ -86,6 +87,12 @@ router.get(
   validate,
   businessController.getOrderById
 );
+
+router.get('/orders/:orderId/payment-proof', [param('orderId').isMongoId()], validate, bankTransfer.getProof);
+router.put('/orders/:orderId/payment-proof', [
+  param('orderId').isMongoId(),
+  body('decision').isIn(['accept', 'reject']),
+], validate, bankTransfer.reviewProof);
 
 router.put(
   '/orders/:orderId/status',

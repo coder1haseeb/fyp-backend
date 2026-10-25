@@ -9,7 +9,7 @@ const paymentSchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store'],
+      enum: ['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'cod', 'pay_at_store', 'bank_transfer'],
       required: true,
     },
     amount: {
@@ -34,6 +34,10 @@ const paymentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    proofImage: { type: String, default: '', select: false },
+    proofStatus: { type: String, enum: ['none', 'submitted', 'accepted', 'rejected'], default: 'none' },
+    proofSubmittedAt: { type: Date, default: null },
+    proofReviewedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
