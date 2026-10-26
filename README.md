@@ -25,7 +25,7 @@ python scripts/train_recommendations.py
 The trainer reads `MONGO_URI` from `.env`, uses the last 90 days of impressions,
 and attributes actions occurring within 24 hours of each impression. It splits
 recommendation requests by time, trains on the earlier 80%, and compares
-NDCG@4 on the later 20% with the current hybrid ranking. At least 100 requests
+NDCG@4 on the later 20% with the current hybrid ranking. At least 50 requests
 and 30 requests with positive feedback are required. A model is saved only if
 it improves NDCG@4 by at least 0.01; otherwise the existing ranker stays active.
 The Node API picks up a validated model automatically within 30 seconds. Run
@@ -42,6 +42,11 @@ performed better. Install the Python requirements on the API server first. If
 The deployment script creates `.venv-recommendations` and installs these
 dependencies automatically. The admin button uses that virtual environment
 when it exists.
+The admin button passes `--include-recent`, allowing an immediate training
+attempt using feedback observed so far. A saved model is marked
+`provisional_feedback` because its newest requests have not completed the
+24-hour feedback window. Running the script without that flag keeps the mature
+feedback rule for scheduled training.
 
 For a presentation with too little real feedback, run
 `python scripts/seed_demo_recommendations.py --activate`. This creates 640

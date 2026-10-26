@@ -4,6 +4,7 @@ Run from the backend directory after installing requirements-recommendations.txt
 The API keeps using its hybrid ranker unless a model beats it on a later holdout.
 """
 
+import argparse
 import json
 import math
 import os
@@ -19,7 +20,8 @@ from pymongo import MongoClient
 
 ROOT = Path(__file__).resolve().parents[1]
 FEATURE_NAMES = json.loads((ROOT / "utils" / "recommendationFeatures.json").read_text(encoding="utf-8"))
-WINDOW = timedelta(hours=24)
+TRAINING_CONFIG = json.loads((ROOT / "config" / "recommendationTraining.json").read_text(encoding="utf-8"))
+WINDOW = timedelta(hours=TRAINING_CONFIG["feedbackWindowHours"])
 
 
 def ndcg_at_4(groups, scores):
@@ -45,9 +47,9 @@ def flatten(groups):
             [len(group) for group in groups])
 
 
-def load_groups(db):
-    end = datetime.now(timezone.utc) - WINDOW
-    start = end - timedelta(days=90)
+def load_groups(db, include_recent=False):
+    end = datetime.now(timezone.utc) if include_recent else datetime.now(timezone.utc) - WINDOW
+    start = end - timedelta(days=TRAINING_CONFIG["lookbackDays"])
     impressions = list(db.recommendationimpressions.find(
         {"createdAt": {"$gte": start, "$lt": end}},
         {"requestId": 1, "customer": 1, "product": 1, "features": 1,
@@ -86,13 +88,15 @@ def load_groups(db):
     return sorted(groups, key=lambda rows: rows[0]["created"])
 
 
-def train(groups, output):
-    if len(groups) < 100 or sum(any(row["label"] > 0 for row in g) for g in groups) < 30:
+def train(groups, output, source=None):
+    if len(groups) < TRAINING_CONFIG["minRequests"] or sum(
+            any(row["label"] > 0 for row in g) for g in groups) < TRAINING_CONFIG["minPositiveRequests"]:
         print("Not enough recommendation feedback yet; keeping the hybrid ranker.")
         return False
     split = int(len(groups) * 0.8)
     training, validation = groups[:split], groups[split:]
-    if len(validation) < 20 or not any(row["label"] > 0 for g in validation for row in g):
+    if len(validation) < TRAINING_CONFIG["minValidationRequests"] or not any(
+            row["label"] > 0 for g in validation for row in g):
         print("Not enough later validation feedback; keeping the hybrid ranker.")
         return False
 
@@ -116,7 +120,7 @@ def train(groups, output):
     learned_ndcg = ndcg_at_4(validation, model_scores)
     baseline_ndcg = ndcg_at_4(validation, baseline_scores)
     print(f"Holdout NDCG@4: LightGBM={learned_ndcg:.4f}, hybrid={baseline_ndcg:.4f}")
-    if learned_ndcg < baseline_ndcg + 0.01:
+    if learned_ndcg < baseline_ndcg + TRAINING_CONFIG["minimumImprovement"]:
         print("Learned model did not improve ranking; keeping the hybrid ranker.")
         return False
 
@@ -124,6 +128,10 @@ def train(groups, output):
     artifact["trained_at"] = datetime.now(timezone.utc).isoformat()
     artifact["validation_ndcg_at_4"] = learned_ndcg
     artifact["baseline_ndcg_at_4"] = baseline_ndcg
+    if source:
+        artifact["training_source"] = source
+        artifact["feedback_window_complete_at"] = (
+            max(row["created"] for group in groups for row in group) + WINDOW).isoformat()
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -134,6 +142,10 @@ def train(groups, output):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--include-recent", action="store_true",
+                        help="Use provisional feedback from requests less than 24 hours old")
+    arguments = parser.parse_args()
     load_dotenv(ROOT / ".env")
     if not os.environ.get("MONGO_URI"):
         raise SystemExit("MONGO_URI is required")
@@ -141,4 +153,5 @@ if __name__ == "__main__":
                        ROOT / "artifacts" / "recommendation-ranker.json")
     with MongoClient(os.environ["MONGO_URI"], serverSelectionTimeoutMS=10000) as client:
         database = client.get_default_database(default=os.environ.get("MONGO_DB_NAME", "test"))
-        train(load_groups(database), output_path)
+        train(load_groups(database, include_recent=arguments.include_recent), output_path,
+              source="provisional_feedback" if arguments.include_recent else None)

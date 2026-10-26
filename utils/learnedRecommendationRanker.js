@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const FEATURE_NAMES = require('./recommendationFeatures.json');
+const TRAINING_CONFIG = require('../config/recommendationTraining.json');
 
 const modelPath = () => process.env.RECOMMENDER_MODEL_PATH ||
   path.join(__dirname, '..', 'artifacts', 'recommendation-ranker.json');
@@ -15,7 +16,7 @@ const validModel = model => model?.feature_names?.length === FEATURE_NAMES.lengt
   Array.isArray(model.tree_info) && model.tree_info.length > 0 &&
   Number.isFinite(model.validation_ndcg_at_4) &&
   Number.isFinite(model.baseline_ndcg_at_4) &&
-  model.validation_ndcg_at_4 >= model.baseline_ndcg_at_4 + 0.01;
+  model.validation_ndcg_at_4 >= model.baseline_ndcg_at_4 + TRAINING_CONFIG.minimumImprovement;
 
 function loadModel() {
   const filename = modelPath();
@@ -38,6 +39,12 @@ function loadModel() {
   return cachedModel;
 }
 
+function getActiveModel() {
+  const model = loadModel();
+  return model && (model.training_source !== 'synthetic_demo' ||
+    Date.now() < Date.parse(model.demo_expires_at)) ? model : null;
+}
+
 function treeValue(node, features) {
   while (node && node.split_feature !== undefined) {
     if (node.decision_type !== '<=') throw new Error('Unsupported LightGBM split');
@@ -57,9 +64,8 @@ function score(model, features) {
 }
 
 function rankWithLearnedModel(candidates) {
-  const model = loadModel();
-  if (!model || (model.training_source === 'synthetic_demo' &&
-      Date.now() >= Date.parse(model.demo_expires_at))) {
+  const model = getActiveModel();
+  if (!model) {
     return { candidates, model: 'hybrid' };
   }
   try {
@@ -75,4 +81,4 @@ function rankWithLearnedModel(candidates) {
   }
 }
 
-module.exports = { rankWithLearnedModel, score };
+module.exports = { rankWithLearnedModel, score, getActiveModel };

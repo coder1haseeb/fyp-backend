@@ -1,0 +1,8 @@
+{
+  "minRequests": 50,
+  "minPositiveRequests": 30,
+  "minValidationRequests": 10,
+  "feedbackWindowHours": 24,
+  "lookbackDays": 90,
+  "minimumImprovement": 0.01
+}
