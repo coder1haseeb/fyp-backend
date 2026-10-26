@@ -3,6 +3,7 @@ const Customer = require('../models/Customer');
 const BusinessOwner = require('../models/BusinessOwner');
 const Admin = require('../models/Admin');
 const Business = require('../models/Business');
+const Category = require('../models/Category');
 const { success, error } = require('../utils/ApiResponse');
 const generateToken = require('../utils/generateToken');
 const generateOTP = require('../utils/generateOTP');
@@ -76,6 +77,14 @@ const registerBusiness = async (req, res) => {
       storePhone,
     } = req.body;
 
+    const category = await Category.findOne({ _id: categoryId, isActive: true });
+    if (!category) return error(res, 400, 'Select an active store category', 'INVALID_CATEGORY');
+    const logo = req.body.logo;
+    if (logo !== undefined && (typeof logo !== 'string' || logo.length > 3 * 1024 * 1024 ||
+        !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(logo))) {
+      return error(res, 400, 'Logo must be a JPG, PNG, or WebP image smaller than 2 MB', 'INVALID_LOGO');
+    }
+
     // Check if business owner already exists
     const existingOwner = await BusinessOwner.findOne({ email });
     if (existingOwner) {
@@ -104,7 +113,7 @@ const registerBusiness = async (req, res) => {
       city,
       location,
       phone: storePhone,
-      logo: req.body.logo || '',
+      logo: logo || '',
       owner: owner._id,
       approvalStatus: 'pending',
     });

@@ -21,7 +21,7 @@ const registerBusinessValidation = [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('phone').matches(/^[0-9]{10,}$/).withMessage('Valid phone number is required'),
   body('storeName').notEmpty().withMessage('Store name is required'),
-  body('categoryId').notEmpty().withMessage('Category is required'),
+  body('categoryId').isMongoId().withMessage('Select a valid category'),
   body('address').notEmpty().withMessage('Address is required'),
   body('city').notEmpty().withMessage('City is required'),
   body('storePhone').matches(/^[0-9]{10,}$/).withMessage('Valid phone number is required'),
