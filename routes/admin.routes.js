@@ -6,12 +6,19 @@ const adminController = require('../controllers/admin.controller');
 const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
+const recommendationTraining = require('../utils/recommendationTraining');
 
 // All routes require super_admin auth
 router.use(auth, authorize('super_admin'));
 
 // Dashboard
 router.get('/dashboard', adminController.getDashboard);
+router.get('/recommendations/training', (req, res) => res.json({ success: true, data: recommendationTraining.status() }));
+router.post('/recommendations/train', (req, res) => {
+  const result = recommendationTraining.start();
+  return res.status(result.started ? 202 : 409).json({ success: result.started, data: result.status,
+    message: result.started ? 'Recommendation training started.' : 'Recommendation training is already running.' });
+});
 
 // Business management
 router.get(

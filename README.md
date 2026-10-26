@@ -34,6 +34,12 @@ in both the trainer and API environment if the default `artifacts/recommendation
 location is unsuitable. The generated artifact is ignored by Git and should
 be backed up or regenerated during deployment.
 
+Super admins can also start this same trainer from the Recommendation model card
+on `/admin/dashboard`. The API starts it in the background and reports whether
+a validated model was saved, feedback was insufficient, or the hybrid ranker
+performed better. Install the Python requirements on the API server first. If
+`python3` is not on PATH, set `RECOMMENDER_PYTHON` to the Python executable.
+
 For a presentation with too little real feedback, run
 `python scripts/seed_demo_recommendations.py --activate`. This creates 640
 clearly marked synthetic rows in the separate MongoDB
