@@ -33,7 +33,9 @@ function start() {
   if (run.state === 'running') return { started: false, status: status() };
   const previousMtime = (() => { try { return fs.statSync(modelFile()).mtimeMs; } catch { return 0; } })();
   run = { state: 'running', startedAt: new Date().toISOString(), message: 'Training from real recommendation feedback is running.' };
-  const python = process.env.RECOMMENDER_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+  const virtualPython = path.join(root, '.venv-recommendations', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+  const python = process.env.RECOMMENDER_PYTHON ||
+    (fs.existsSync(virtualPython) ? virtualPython : process.platform === 'win32' ? 'python' : 'python3');
   const child = spawn(python, ['scripts/train_recommendations.py'], {
     cwd: root,
     env: process.env,

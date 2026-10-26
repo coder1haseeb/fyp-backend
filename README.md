@@ -39,6 +39,9 @@ on `/admin/dashboard`. The API starts it in the background and reports whether
 a validated model was saved, feedback was insufficient, or the hybrid ranker
 performed better. Install the Python requirements on the API server first. If
 `python3` is not on PATH, set `RECOMMENDER_PYTHON` to the Python executable.
+The deployment script creates `.venv-recommendations` and installs these
+dependencies automatically. The admin button uses that virtual environment
+when it exists.
 
 For a presentation with too little real feedback, run
 `python scripts/seed_demo_recommendations.py --activate`. This creates 640
