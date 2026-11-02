@@ -56,6 +56,20 @@ router.put(
   adminController.decideOnBusiness
 );
 
+
+const editableText = (field, max = 200) => body(field).optional().isString().bail().trim().notEmpty().isLength({ max });
+router.put('/businesses/:businessId', [
+  param('businessId').isMongoId(), editableText('storeName'), editableText('address', 500),
+  editableText('city'), body('description').optional().isString().isLength({ max: 5000 }),
+  body('phone').optional().isString().matches(/^[0-9]{10,}$/), body('isActive').optional().isBoolean({ strict: true }),
+], validate, adminController.updateBusiness);
+router.delete('/businesses/:businessId', [param('businessId').isMongoId()], validate, adminController.deleteBusiness);
+router.put('/users/:userId', [
+  param('userId').isMongoId(), editableText('fullName'), editableText('city'),
+  body('email').optional().isString().bail().trim().isEmail().bail().toLowerCase(),
+  body('phone').optional().isString().matches(/^[0-9]{10,}$/),
+], validate, adminController.updateUser);
+
 // User management
 router.get(
   '/users',
@@ -71,21 +85,21 @@ router.get(
 
 router.put(
   '/users/:userId/suspend',
-  [param('userId').notEmpty().withMessage('User ID is required')],
+  [param('userId').isMongoId().withMessage('Invalid user ID')],
   validate,
   adminController.suspendUser
 );
 
 router.put(
   '/users/:userId/activate',
-  [param('userId').notEmpty().withMessage('User ID is required')],
+  [param('userId').isMongoId().withMessage('Invalid user ID')],
   validate,
   adminController.activateUser
 );
 
 router.delete(
   '/users/:userId',
-  [param('userId').notEmpty().withMessage('User ID is required')],
+  [param('userId').isMongoId().withMessage('Invalid user ID')],
   validate,
   adminController.deleteUser
 );

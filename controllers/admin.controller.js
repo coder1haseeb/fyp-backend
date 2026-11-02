@@ -161,7 +161,8 @@ const getUsers = async (req, res) => {
     let total = 0;
 
     if (!role || role === 'customer') {
-      const searchQuery = search ? { fullName: { $regex: search, $options: 'i' }, ...query } : query;
+      const term = String(search || '').slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchQuery = term ? { ...query, $or: [{ fullName: { $regex: term, $options: 'i' } }, { email: { $regex: term, $options: 'i' } }] } : query;
       const customers = await Customer.find(searchQuery)
         .select('-passwordHash -otpCode -otpExpiry')
         .sort({ createdAt: -1 })
@@ -171,7 +172,8 @@ const getUsers = async (req, res) => {
     }
 
     if (!role || role === 'business_admin') {
-      const searchQuery = search ? { fullName: { $regex: search, $options: 'i' }, ...query } : query;
+      const term = String(search || '').slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchQuery = term ? { ...query, $or: [{ fullName: { $regex: term, $options: 'i' } }, { email: { $regex: term, $options: 'i' } }] } : query;
       const owners = await BusinessOwner.find(searchQuery)
         .select('-passwordHash')
         .sort({ createdAt: -1 })
@@ -248,26 +250,70 @@ const activateUser = async (req, res) => {
   }
 };
 
-// Delete User
+// Updates use explicit fields so roles, credentials and ownership cannot be changed.
+const mutationError = (res, err) => {
+  if (err.code === 11000) return error(res, 409, 'Email already in use', 'DUPLICATE_EMAIL');
+  if (err.name === 'ValidationError' || err.name === 'CastError') return error(res, 400, 'Invalid record details', 'INVALID_DETAILS');
+  console.error('Admin mutation failed:', err);
+  return error(res, 500, 'Could not save changes', 'ADMIN_MUTATION_ERROR');
+};
+
+const updateUser = async (req, res) => {
+  try {
+    const user = await Customer.findById(req.params.userId) || await BusinessOwner.findById(req.params.userId);
+    if (!user) return error(res, 404, 'User not found', 'NOT_FOUND');
+    for (const field of ['fullName', 'phone', ...(user.role === 'customer' ? ['city'] : [])]) {
+      if (req.body[field] !== undefined) user[field] = req.body[field];
+    }
+    if (req.body.email !== undefined && req.body.email !== user.email) {
+      user.email = req.body.email;
+      if (user.role === 'customer') { user.emailVerified = false; user.otpCode = undefined; user.otpExpiry = undefined; }
+    }
+    await user.save();
+    return success(res, 200, 'User updated', { userId: user._id });
+  } catch (err) { return mutationError(res, err); }
+};
+
+const updateBusiness = async (req, res) => {
+  try {
+    const business = await Business.findById(req.params.businessId);
+    if (!business) return error(res, 404, 'Store not found', 'NOT_FOUND');
+    if (req.body.isActive === true && business.approvalStatus !== 'approved') return error(res, 400, 'Approve this store before activating it', 'NOT_APPROVED');
+    for (const field of ['storeName', 'description', 'address', 'city', 'phone', 'isActive']) {
+      if (req.body[field] !== undefined) business[field] = req.body[field];
+    }
+    await business.save();
+    return success(res, 200, 'Store updated', { businessId: business._id });
+  } catch (err) { return mutationError(res, err); }
+};
+
+const deleteBusiness = async (req, res) => {
+  try {
+    const business = await Business.findById(req.params.businessId);
+    if (!business) return error(res, 404, 'Store not found', 'NOT_FOUND');
+    const Product = require('../models/Product');
+    if (await Order.exists({ business: business._id }) || await Product.exists({ business: business._id })) {
+      return error(res, 409, 'This store has products or orders. Deactivate it instead to preserve these records.', 'STORE_IN_USE');
+    }
+    await BusinessOwner.updateOne({ _id: business.owner }, { $pull: { businesses: business._id } });
+    await Business.deleteOne({ _id: business._id });
+    return success(res, 200, 'Store deleted', {});
+  } catch (err) { return mutationError(res, err); }
+};
+
 const deleteUser = async (req, res) => {
   try {
     const { userId } = req.params;
-
-    let result = await Customer.findByIdAndDelete(userId);
-
-    if (!result) {
-      result = await BusinessOwner.findByIdAndDelete(userId);
+    const customer = await Customer.findById(userId);
+    const user = customer || await BusinessOwner.findById(userId);
+    if (!user) return error(res, 404, 'User not found', 'NOT_FOUND');
+    if (customer ? await Order.exists({ customer: userId }) : await Business.exists({ owner: userId })) {
+      return error(res, 409, 'This user has linked orders or stores. Suspend the account instead.', 'USER_IN_USE');
     }
-
-    if (!result) {
-      return error(res, 404, 'User not found', 'NOT_FOUND');
-    }
-
+    await user.deleteOne();
+    if (customer) await require('../models/Cart').deleteOne({ customer: userId });
     return success(res, 200, 'User deleted', {});
-  } catch (err) {
-    console.error('Delete user error:', err);
-    return error(res, 500, 'Error deleting user', 'DELETE_ERROR');
-  }
+  } catch (err) { return mutationError(res, err); }
 };
 
 module.exports = {
@@ -279,4 +325,7 @@ module.exports = {
   suspendUser,
   activateUser,
   deleteUser,
+  updateUser,
+  updateBusiness,
+  deleteBusiness,
 };
