@@ -4,6 +4,12 @@ const router = express.Router();
 
 const storeController = require('../controllers/store.controller');
 const validate = require('../middleware/validate');
+const rateLimit = require('express-rate-limit');
+const { searchLocations } = require('../controllers/locationSearch.controller');
+
+router.get('/locations/search', rateLimit({ windowMs: 60000, limit: 20, standardHeaders: true, legacyHeaders: false,
+  message: { success: false, message: 'Too many searches. Please try again in a minute.' },
+}), [query('q').isString().bail().trim().isLength({ min: 3, max: 160 })], validate, searchLocations);
 
 router.get('/nearby', [
   query('latitude').isFloat({ min: -90, max: 90 }),
