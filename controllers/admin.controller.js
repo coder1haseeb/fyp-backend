@@ -15,24 +15,11 @@ const getDashboard = async (req, res) => {
     const activeBusinesses = await Business.countDocuments({ approvalStatus: 'approved', isActive: true });
     const totalOrders = await Order.countDocuments();
 
-    const totalRevenue = await Order.aggregate([
-      {
-        $match: { status: { $ne: 'cancelled' } },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$totalAmount' },
-        },
-      },
-    ]);
-
     return success(res, 200, 'Dashboard retrieved', {
       totalCustomers: customerCount,
       totalBusinessOwners: businessOwnerCount,
       activeBusinesses,
       totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
     });
   } catch (err) {
     console.error('Get dashboard error:', err);

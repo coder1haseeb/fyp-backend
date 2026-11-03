@@ -20,7 +20,6 @@ const getGrowthStats = async (req, res) => {
                   },
                 },
                 count: { $sum: 1 },
-                revenue: { $sum: '$totalAmount' },
               },
             },
             { $sort: { _id: 1 } },
@@ -95,7 +94,6 @@ const getTopStores = async (req, res) => {
         $group: {
           _id: '$business',
           ordersCount: { $sum: 1 },
-          totalRevenue: { $sum: '$totalAmount' },
         },
       },
       {
@@ -123,7 +121,6 @@ const getTopStores = async (req, res) => {
           logo: '$business.logo',
           rating: '$business.rating',
           ordersCount: 1,
-          totalRevenue: 1,
         },
       },
     ]);
@@ -151,7 +148,6 @@ const exportReport = async (req, res) => {
             },
           },
           totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: '$totalAmount' },
         },
       },
       { $sort: { _id: 1 } },
@@ -165,11 +161,11 @@ const exportReport = async (req, res) => {
     csv += `Total Users,${totalUsers}\n`;
     csv += `Active Businesses,${totalBusinesses}\n\n`;
 
-    csv += 'Monthly Revenue Report\n';
-    csv += 'Month,Total Orders,Revenue (PKR)\n';
+    csv += 'Monthly Orders Report\n';
+    csv += 'Month,Total Orders\n';
 
     stats.forEach((stat) => {
-      csv += `${stat._id},${stat.totalOrders},${stat.totalRevenue.toFixed(2)}\n`;
+      csv += `${stat._id},${stat.totalOrders}\n`;
     });
 
     res.set('Content-Type', 'text/csv');
