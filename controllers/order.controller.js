@@ -71,8 +71,8 @@ const placeOrder = async (req, res) => {
       });
     }
 
-    if (['jazzcash', 'easypaisa', 'rapidgateway', 'safepay', 'bank_transfer'].includes(paymentMethod) && Object.keys(ordersByBusiness).length > 1) {
-      return error(res, 400, 'Wallet checkout supports one store at a time. Please order from each store separately.', 'MULTI_STORE_WALLET');
+    if (Object.keys(ordersByBusiness).length > 1) {
+      return error(res, 400, 'Checkout supports one store at a time. Remove items from other stores before placing your order.', 'MULTI_STORE_CART');
     }
 
     if (paymentMethod === 'bank_transfer') {
@@ -163,7 +163,7 @@ const placeOrder = async (req, res) => {
     }
 
     // Clear cart
-    await Cart.findOneAndUpdate({ customer: customerId }, { items: [] });
+    await Cart.findOneAndUpdate({ customer: customerId }, { $set: { items: [] }, $inc: { __v: 1 } });
     for (const created of createdOrders.filter(entry => ['cod', 'pay_at_store'].includes(entry.order.paymentMethod))) {
       for (const item of created.order.items) {
         await recordInteraction(customerId, item.product, 'purchase');

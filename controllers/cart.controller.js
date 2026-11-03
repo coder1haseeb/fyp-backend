@@ -54,6 +54,14 @@ const addToCart = async (req, res) => {
       cart = new Cart({ customer: customerId, items: [] });
     }
 
+    if (cart.items.length) {
+      const products = await Product.find({ _id: { $in: cart.items.map(item => item.product) } }).select('business');
+      if (products.length !== cart.items.length) return error(res, 400, 'Remove unavailable products from your cart before adding more items.', 'PRODUCT_UNAVAILABLE');
+      if (products.some(item => String(item.business) !== String(product.business))) {
+        return error(res, 409, 'Your cart can contain items from one store at a time. Complete your current order or empty the cart before shopping at another store.', 'MULTI_STORE_CART');
+      }
+    }
+
     // Check if product already in cart
     const existingItem = cart.items.find((item) => item.product.toString() === productId);
 
@@ -83,6 +91,7 @@ const addToCart = async (req, res) => {
 
     return success(res, 201, 'Product added to cart', populated);
   } catch (err) {
+    if (err.name === 'VersionError' || err.code === 11000) return error(res, 409, 'Your cart changed. Please refresh it and try again.', 'CART_CHANGED');
     console.error('Add to cart error:', err);
     return error(res, 500, 'Error adding to cart', 'ADD_CART_ERROR');
   }
@@ -142,7 +151,7 @@ const removeCartItem = async (req, res) => {
 
     const cart = await Cart.findOneAndUpdate(
       { customer: customerId },
-      { $pull: { items: { _id: cartItemId } } },
+      { $pull: { items: { _id: cartItemId } }, $inc: { __v: 1 } },
       { new: true }
     ).populate({
       path: 'items.product',
@@ -171,7 +180,7 @@ const clearCart = async (req, res) => {
 
     const cart = await Cart.findOneAndUpdate(
       { customer: customerId },
-      { items: [] },
+      { $set: { items: [] }, $inc: { __v: 1 } },
       { new: true }
     );
 
