@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const { selectStoreItems } = require('../utils/cartSelection');
 const Payment = require('../models/Payment');
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
@@ -37,10 +38,15 @@ const placeOrder = async (req, res) => {
       return error(res, 400, 'Cart is empty', 'EMPTY_CART');
     }
 
+    const selection = selectStoreItems(cart.items, req.body.businessId);
+    if (selection.error) return error(res, 400, selection.error, 'STORE_SELECTION_REQUIRED');
+    const visibleStore = await Business.exists({ _id: selection.businessId, approvalStatus: 'approved', isActive: true });
+    if (!visibleStore) return error(res, 400, 'This store is unavailable for checkout.', 'STORE_UNAVAILABLE');
+
     // Group items by business
     const ordersByBusiness = {};
 
-    for (const item of cart.items) {
+    for (const item of selection.items) {
       const product = item.product;
 
       if (!product || product.status !== 'active') {
@@ -163,7 +169,7 @@ const placeOrder = async (req, res) => {
     }
 
     // Clear cart
-    await Cart.findOneAndUpdate({ customer: customerId }, { $set: { items: [] }, $inc: { __v: 1 } });
+    await Cart.findOneAndUpdate({ customer: customerId }, { $pull: { items: { _id: { $in: selection.items.map(item => item._id) } } }, $inc: { __v: 1 } });
     for (const created of createdOrders.filter(entry => ['cod', 'pay_at_store'].includes(entry.order.paymentMethod))) {
       for (const item of created.order.items) {
         await recordInteraction(customerId, item.product, 'purchase');

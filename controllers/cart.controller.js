@@ -54,14 +54,6 @@ const addToCart = async (req, res) => {
       cart = new Cart({ customer: customerId, items: [] });
     }
 
-    if (cart.items.length) {
-      const products = await Product.find({ _id: { $in: cart.items.map(item => item.product) } }).select('business');
-      if (products.length !== cart.items.length) return error(res, 400, 'Remove unavailable products from your cart before adding more items.', 'PRODUCT_UNAVAILABLE');
-      if (products.some(item => String(item.business) !== String(product.business))) {
-        return error(res, 409, 'Your cart can contain items from one store at a time. Complete your current order or empty the cart before shopping at another store.', 'MULTI_STORE_CART');
-      }
-    }
-
     // Check if product already in cart
     const existingItem = cart.items.find((item) => item.product.toString() === productId);
 

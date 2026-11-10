@@ -15,6 +15,7 @@ router.use(auth, authorize('customer'));
 router.post(
   '/',
   [
+    body('businessId').optional().isMongoId().withMessage('Invalid store selection'),
     body('deliveryAddress').notEmpty().withMessage('Delivery address is required'),
     body('deliveryAddress.street').notEmpty().withMessage('Street is required'),
     body('deliveryAddress.city').notEmpty().withMessage('City is required'),
