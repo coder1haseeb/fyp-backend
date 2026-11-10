@@ -10,13 +10,14 @@ const interactionSchema = new mongoose.Schema(
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
-      required: [true, 'Product is required'],
+      required: function () { return this.interactionType !== 'search'; },
     },
     interactionType: {
       type: String,
       enum: ['view', 'add_to_cart', 'purchase', 'search'],
       required: true,
     },
+    searchQuery: { type: String, trim: true, maxlength: 160, default: '' },
     durationSeconds: {
       type: Number,
       default: 0,

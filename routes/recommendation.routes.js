@@ -30,6 +30,8 @@ router.get(
 );
 
 // Log interaction
+router.post('/search', [body('query').isString().bail().trim().isLength({ min: 2, max: 160 })], validate, recommendationController.logSearch);
+
 router.post(
   '/interaction',
   [

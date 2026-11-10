@@ -36,9 +36,26 @@ const similarity = (left, right) => {
 
 const normalize = (value, maximum) => maximum > 0 ? value / maximum : 0;
 
-function rankProducts({ products, interactions = [], customerId, customerCity = '', limit = 10, excludeId, withScores = false }) {
-  const vectors = buildVectors(products);
-  const index = new Map(products.map((product, position) => [String(product._id), position]));
+function rankProducts({ products, historyProducts = [], interactions = [], customerId, customerCity = '', limit = 10, excludeId, withScores = false }) {
+  const catalogue = [...products, ...historyProducts.filter(product => !products.some(candidate => String(candidate._id) === String(product._id)))];
+  const vectors = buildVectors(catalogue);
+  const index = new Map(catalogue.map((product, position) => [String(product._id), position]));
+  const categories = new Set();
+  const interestVectors = [];
+  const searchedIds = new Set();
+  const searches = interactions.filter(event => String(event.customer) === String(customerId) && event.interactionType === 'search' && event.searchQuery);
+  const stopWords = new Set(['a', 'an', 'the', 'for', 'of', 'and', 'in', 'to', 'buy', 'product', 'products']);
+  for (const event of searches) {
+    const words = tokens({ name: event.searchQuery }).filter(word => !stopWords.has(word));
+    if (!words.length) continue;
+    for (const product of catalogue) {
+      const text = new Set(tokens(product));
+      if (words.every(word => text.has(word))) {
+        searchedIds.add(String(product._id));
+        if (product.category?.trim()) categories.add(product.category.trim().toLowerCase());
+      }
+    }
+  }
   const customerEvents = interactions.filter(event => String(event.customer) === String(customerId) && WEIGHTS[event.interactionType]);
   const seen = new Map();
   const purchased = new Set();
@@ -49,11 +66,18 @@ function rankProducts({ products, interactions = [], customerId, customerCity = 
     const id = String(event.product);
     const position = index.get(id);
     if (position === undefined) continue;
+    interestVectors.push(vectors[position]);
+    if (catalogue[position].category?.trim()) categories.add(catalogue[position].category.trim().toLowerCase());
     const ageDays = Math.max(0, (now - new Date(event.createdAt).getTime()) / 86400000);
     const weight = WEIGHTS[event.interactionType] * Math.exp(-ageDays / 45);
     seen.set(id, (seen.get(id) || 0) + weight);
     if (event.interactionType === 'purchase') purchased.add(id);
     for (const [word, value] of vectors[position]) profile.set(word, (profile.get(word) || 0) + value * weight);
+  }
+  for (const id of searchedIds) {
+    const vector = vectors[index.get(id)];
+    interestVectors.push(vector);
+    for (const [word, value] of vector) profile.set(word, (profile.get(word) || 0) + value * 2);
   }
   const profileLength = Math.sqrt([...profile.values()].reduce((sum, value) => sum + value * value, 0)) || 1;
   for (const [word, value] of profile) profile.set(word, value / profileLength);
@@ -81,10 +105,15 @@ function rankProducts({ products, interactions = [], customerId, customerCity = 
   }
   const maxCollaborative = Math.max(0, ...collaborative.values());
   const maxPopularity = Math.max(0, ...popularity.values());
-  const hasHistory = seen.size > 0;
+  const hasHistory = seen.size > 0 || searches.length > 0;
   const available = products.filter(product => String(product._id) !== String(excludeId || ''));
-  const unseen = available.filter(product => !purchased.has(String(product._id)));
-  const candidates = unseen.length ? unseen : available;
+  const related = hasHistory ? available.filter(product => {
+    const id = String(product._id);
+    return seen.has(id) || searchedIds.has(id) || categories.has(product.category?.trim().toLowerCase()) ||
+      interestVectors.some(vector => similarity(vector, vectors[index.get(id)]) >= 0.2);
+  }) : available;
+  const unseen = related.filter(product => !purchased.has(String(product._id)));
+  const candidates = unseen.length ? unseen : related;
 
   return candidates.map(product => {
     const id = String(product._id);

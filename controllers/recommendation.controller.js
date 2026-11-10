@@ -20,13 +20,19 @@ const visibleCatalogue = async () => {
 const getRecommendations = async (req, res) => {
   try {
     const limit = Number(req.query.limit || 10);
-    const [products, interactions, customer] = await Promise.all([
+    const since = new Date(Date.now() - 90 * 86400000);
+    const [products, peerInteractions, ownInteractions, customer] = await Promise.all([
       visibleCatalogue(),
-      Interaction.find({ createdAt: { $gte: new Date(Date.now() - 90 * 86400000) } })
+      Interaction.find({ customer: { $ne: req.user.userId }, createdAt: { $gte: since } })
         .sort({ createdAt: -1 }).limit(5000).lean(),
+      Interaction.find({ customer: req.user.userId, createdAt: { $gte: since } })
+        .sort({ createdAt: -1 }).limit(1000).lean(),
       Customer.findById(req.user.userId).select('city').lean(),
     ]);
-    const candidates = rankProducts({ products, interactions, customerId: req.user.userId,
+    const interactions = [...ownInteractions, ...peerInteractions];
+    const historyIds = [...new Set(ownInteractions.filter(event => event.product).map(event => String(event.product)))];
+    const historyProducts = historyIds.length ? await Product.find({ _id: { $in: historyIds } }).select('name category description').lean() : [];
+    const candidates = rankProducts({ products, historyProducts, interactions, customerId: req.user.userId,
       customerCity: customer?.city || '', limit: Math.max(limit, 30), withScores: true });
     const ranking = rankWithLearnedModel(candidates);
     const shown = ranking.candidates.slice(0, limit);
@@ -91,4 +97,16 @@ const logInteraction = async (req, res) => {
   }
 };
 
-module.exports = { getRecommendations, getSimilarProducts, logInteraction };
+const logSearch = async (req, res) => {
+  try {
+    const searchQuery = req.body.query.trim().toLowerCase();
+    const recent = await Interaction.exists({ customer: req.user.userId, interactionType: 'search', searchQuery,
+      createdAt: { $gte: new Date(Date.now() - 5 * 60000) } });
+    if (!recent) await Interaction.create({ customer: req.user.userId, interactionType: 'search', searchQuery });
+    return success(res, 201, 'Search recorded', {});
+  } catch (err) {
+    return error(res, 500, 'Could not record search', 'SEARCH_LOG_ERROR');
+  }
+};
+
+module.exports = { getRecommendations, getSimilarProducts, logInteraction, logSearch };
